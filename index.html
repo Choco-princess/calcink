@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CalcInk: On-Device Handwritten Math Calculator</title>
+  <link rel="stylesheet" href="./src/style.css">
+  <!-- TensorFlow.js WebGL client-side runtime -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+</head>
+<body>
+  <!-- Header & Toolbar -->
+  <header>
+    <div class="logo-area">
+      <span class="logo-title">CalcInk</span>
+      <span class="logo-badge">On-Device Math Calculator</span>
+    </div>
+
+    <div class="toolbar">
+      <!-- Tool Selection -->
+      <div class="tool-group">
+        <button id="btn-pen" class="btn active" title="Pen Tool">
+          ✏️ <span>Pen</span>
+        </button>
+        <button id="btn-eraser" class="btn" title="Stroke Eraser">
+          🧹 <span>Eraser</span>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Pen Width Selection -->
+      <div class="tool-group">
+        <button id="btn-width-thin" class="btn" data-width="2" title="Thin Line">2px</button>
+        <button id="btn-width-med" class="btn active" data-width="4" title="Medium Line">4px</button>
+        <button id="btn-width-thick" class="btn" data-width="7" title="Thick Line">7px</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Undo / Redo / Clear -->
+      <div class="tool-group">
+        <button id="btn-undo" class="btn" title="Undo (Ctrl+Z)">
+          ↩️ <span>Undo</span>
+        </button>
+        <button id="btn-redo" class="btn" title="Redo (Ctrl+Y)">
+          ↪️ <span>Redo</span>
+        </button>
+        <button id="btn-clear" class="btn btn-danger" title="Clear Canvas">
+          🗑️ <span>Clear</span>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Segregation View Toggle -->
+      <div class="tool-group">
+        <button id="btn-toggle-boxes" class="btn active" title="Toggle AI Character Bounding Boxes">
+          📦 <span>Bounding Boxes: ON</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Interactive Dual-Layer Canvas Container -->
+  <main class="canvas-wrapper">
+    <canvas id="ink-canvas" class="ink-canvas"></canvas>
+    <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+  </main>
+
+  <!-- Footer Info & Live Segregation Status -->
+  <footer>
+    <div class="stats-group">
+      <div class="stat-item">
+        <span>Strokes:</span>
+        <span id="stat-strokes" class="stat-value">0</span>
+      </div>
+      <div class="stat-item">
+        <span>Detected Symbols:</span>
+        <span id="stat-clusters" class="stat-value">0</span>
+      </div>
+      <div class="stat-item">
+        <span>Left-to-Right Sequence:</span>
+        <span id="stat-sequence" class="stat-value">[ none ]</span>
+      </div>
+    </div>
+
+    <div class="status-badge">
+      <span class="status-dot"></span>
+      <span>100% Client-Side • 60 FPS Digital Ink Engine</span>
+    </div>
+  </footer>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import { PatchExtractor } from './recognition/PatchExtractor.js';
 import { Evaluator } from './evaluator/Evaluator.js';
 import { SYMBOLS, correctionKey, applyManualCorrections } from './recognition/Corrections.js';
 import { blankPage, newNotebook, serializeStrokes, hydrateStrokes, validateNotebook, loadNotebook, saveNotebook } from './notebook/Notebook.js';
+import { isDivisionDotPosition } from './canvas/DivisionDot.js';
 
 function splitAtEquals(rows) {
   const blocks = [];
@@ -181,6 +182,7 @@ window.addEventListener('DOMContentLoaded', () => {
   canvasManager.onStrokeCommitted = saveNow;
 
   canvasManager.onSymbolTap = (x, y, event) => {
+    if (isDivisionDotPosition(canvasManager.strokes, x, y, writingScale)) return false;
     const padding = event.pointerType === 'touch' ? 12 : 7;
     const hits = canvasManager.blocks.flatMap(block => block.clusters)
       .filter(cluster => cluster.predictedSymbol &&

@@ -279,7 +279,7 @@ export class CanvasManager {
 
       // Draw bounding boxes for characters if enabled
       if (this.options.showBoundingBoxes) {
-        block.clusters.forEach((cluster, charIdx) => {
+        [...block.clusters, ...(block.answerClusters || [])].forEach((cluster, charIdx) => {
           const b = cluster.bounds;
           const x = b.minX - padding;
           const y = b.minY - padding;
@@ -351,6 +351,16 @@ export class CanvasManager {
           this.overlayCtx.restore();
         }
       }
+      if (block.practiceMark) {
+        const last = block.answerClusters.at(-1);
+        this.overlayCtx.save();
+        this.overlayCtx.textBaseline = 'middle';
+        this.overlayCtx.font = 'bold 32px -apple-system, BlinkMacSystemFont, sans-serif';
+        this.overlayCtx.fillStyle = block.practiceMark === 'correct' ? '#059669' : '#dc2626';
+        this.overlayCtx.fillText(block.practiceMark === 'correct' ? '✓' : '✕',
+          last.bounds.maxX + 14, last.centerY);
+        this.overlayCtx.restore();
+      }
     });
     if (animating && this.animationFrame === null) {
       this.animationFrame = requestAnimationFrame(() => {
@@ -409,6 +419,10 @@ export class CanvasManager {
 
   setPenWidth(width) {
     this.options.penWidth = width;
+  }
+
+  setPenColor(color) {
+    this.options.penColor = color;
   }
 
   toggleBoundingBoxes(show) {

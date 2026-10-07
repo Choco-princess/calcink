@@ -89,6 +89,8 @@ header {
 .page-tabs .btn.active { background: #dbeafe; color: #1d4ed8; }
 #zoom-label { min-width: 44px; text-align: center; font-size: .8rem; color: var(--text-muted); }
 .notebook-feedback { color: #334155; font-weight: 600; }
+.check-action { background: #dbeafe; color: #1d4ed8; font-weight: 700; }
+.check-action[hidden] { display: none; }
 
 .tool-group {
   display: flex;
@@ -98,6 +100,21 @@ header {
   border-radius: 8px;
   gap: 2px;
 }
+.color-swatch {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+.color-swatch::before {
+  content: '';
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #94a3b8;
+}
+.color-swatch.active::before { box-shadow: 0 0 0 2px var(--primary); }
 
 .btn {
   display: inline-flex;

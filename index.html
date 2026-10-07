@@ -42,6 +42,16 @@
 
       <div class="divider"></div>
 
+      <div class="tool-group pen-colors" role="group" aria-label="Pen colors">
+        <button class="btn color-swatch active" data-color="#0f172a" style="--swatch:#0f172a" type="button" title="Ink pen" aria-label="Ink pen" aria-pressed="true"></button>
+        <button class="btn color-swatch" data-color="#1d4ed8" style="--swatch:#1d4ed8" type="button" title="Blue pen" aria-label="Blue pen" aria-pressed="false"></button>
+        <button class="btn color-swatch" data-color="#7c3aed" style="--swatch:#7c3aed" type="button" title="Purple pen" aria-label="Purple pen" aria-pressed="false"></button>
+        <button class="btn color-swatch" data-color="#b91c1c" style="--swatch:#b91c1c" type="button" title="Red pen" aria-label="Red pen" aria-pressed="false"></button>
+        <button class="btn color-swatch" data-color="#047857" style="--swatch:#047857" type="button" title="Green pen" aria-label="Green pen" aria-pressed="false"></button>
+      </div>
+
+      <div class="divider"></div>
+
       <!-- Undo / Redo / Clear -->
       <div class="tool-group">
         <button id="btn-undo" class="btn" title="Undo (Ctrl+Z)">
@@ -68,12 +78,16 @@
         <button id="btn-save-sample" class="btn" title="Export this drawing and its predictions locally">
           💾 <span>Save Sample</span>
         </button>
+        <button id="btn-sound" class="btn" type="button" aria-pressed="false" title="Sound for practice checks">🔈 <span>Sound: Off</span></button>
+        <button id="btn-haptics" class="btn" type="button" aria-pressed="true" title="Gentle vibration for practice checks">📳 <span>Haptics: On</span></button>
       </div>
     </div>
     <p class="toolbar-hint" aria-hidden="true">Swipe tools sideways →</p>
   </header>
 
   <nav class="notebook-bar" aria-label="Notebook pages">
+    <button id="btn-practice" class="btn notebook-action" type="button" aria-pressed="false">Practice: Off</button>
+    <button id="btn-check" class="btn notebook-action check-action" type="button" hidden>✓ Check</button>
     <div id="page-tabs" class="page-tabs"></div>
     <button id="btn-new-page" class="btn notebook-action" type="button">＋ New page</button>
     <button id="btn-delete-page" class="btn notebook-action" type="button">Delete page</button>

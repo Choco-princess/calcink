@@ -4,10 +4,16 @@ import { Evaluator } from './evaluator/Evaluator.js';
 import { SYMBOLS, correctionKey, applyManualCorrections } from './recognition/Corrections.js';
 import { blankPage, newNotebook, serializeStrokes, hydrateStrokes, validateNotebook, loadNotebook, saveNotebook } from './notebook/Notebook.js';
 import { isDivisionDotPosition } from './canvas/DivisionDot.js';
+import { practiceRow, gradePractice } from './evaluator/Practice.js';
+import { FeedbackEffects } from './ui/FeedbackEffects.js';
 
-function splitAtEquals(rows) {
+function splitAtEquals(rows, practiceMode = false) {
   const blocks = [];
   for (const row of rows) {
+    if (practiceMode) {
+      blocks.push(practiceRow(row));
+      continue;
+    }
     let current = [];
     for (const cluster of row.clusters) {
       current.push(cluster);
@@ -21,14 +27,16 @@ function splitAtEquals(rows) {
   blocks.forEach((block, index) => {
     block.id = `Eq ${index + 1}`;
     block.displayIndex = index + 1;
-    block.bounds = block.clusters.reduce((b, c) => ({
+    block.bounds = [...block.clusters, ...(block.answerClusters || [])].reduce((b, c) => ({
       minX: Math.min(b.minX, c.bounds.minX),
       minY: Math.min(b.minY, c.bounds.minY),
       maxX: Math.max(b.maxX, c.bounds.maxX),
       maxY: Math.max(b.maxY, c.bounds.maxY)
     }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-    block.evaluation = Evaluator.analyze(block.clusters.map(c => c.predictedSymbol));
-    block.evaluatedResult = block.evaluation.result;
+    if (!practiceMode) {
+      block.evaluation = Evaluator.analyze(block.clusters.map(c => c.predictedSymbol));
+      block.evaluatedResult = block.evaluation.result;
+    }
   });
   return blocks;
 }
@@ -65,6 +73,9 @@ window.addEventListener('DOMContentLoaded', () => {
   let saveQueue = Promise.resolve();
   let loadingPage = false;
   let persistenceAvailable = true;
+  let practiceMode = false;
+  const effects = new FeedbackEffects();
+  try { practiceMode = localStorage.getItem('calcink-practice-mode') === 'true'; } catch {}
   overlayCanvas.style.pointerEvents = 'none';
 
   const currentPage = () => book.pages.find(page => page.id === book.activePageId);
@@ -152,17 +163,25 @@ window.addEventListener('DOMContentLoaded', () => {
     if (canvasManager.strokes.length > 0) hasDrawn = true;
     canvasTip.hidden = hasDrawn;
     statStrokes.textContent = canvasManager.strokes.length;
-    statClusters.textContent = canvasManager.blocks.reduce((n, b) => n + b.clusters.length, 0);
+    statClusters.textContent = canvasManager.blocks.reduce((n, b) => n + b.clusters.length + (b.answerClusters?.length || 0), 0);
     statSequence.textContent = canvasManager.blocks.length
       ? canvasManager.blocks.map(b => {
         const expression = b.clusters.map(c => c.predictedSymbol || '?').join(' ');
-        return `[${b.id}: ${expression}${b.evaluatedResult ? ` → ${b.evaluatedResult}` : ''}]`;
+        const answer = practiceMode && b.answerClusters?.length
+          ? ` | Your answer: ${b.answerClusters.map(c => c.predictedSymbol || '?').join(' ')}` : '';
+        return `[${b.id}: ${expression}${answer}${b.evaluatedResult ? ` → ${b.evaluatedResult}` : ''}]`;
       }).join('  |  ')
       : '[ none ]';
     if (!persistenceAvailable) return;
     const blocks = canvasManager.blocks;
-    if (!canvasManager.strokes.length) notebookFeedback.textContent = 'Write an equation ending in =';
-    else if (blocks.some(b => b.clusters.some(c => !c.predictedSymbol))) notebookFeedback.textContent = 'Reading handwriting…';
+    if (!canvasManager.strokes.length) notebookFeedback.textContent = practiceMode
+      ? 'Practice: write one equation per row, then your answer after =.' : 'Write an equation ending in =';
+    else if (blocks.some(b => [...b.clusters, ...(b.answerClusters || [])].some(c => !c.predictedSymbol))) notebookFeedback.textContent = 'Reading handwriting…';
+    else if (practiceMode) notebookFeedback.textContent =
+      blocks.find(b => b.practiceMark === 'wrong')?.practiceFeedback ||
+      blocks.find(b => b.practiceFeedback && !b.practiceMark)?.practiceFeedback ||
+      blocks.find(b => b.practiceFeedback)?.practiceFeedback ||
+      'Write your answer after =, then press Check.';
     else notebookFeedback.textContent = blocks.find(b => b.evaluation?.result === 'Error')?.evaluation.feedback ||
       blocks.find(b => b.evaluation?.result === 'Undefined')?.evaluation.feedback ||
       blocks.find(b => b.evaluation?.result === '')?.evaluation.feedback || 'Answers updated.';
@@ -184,7 +203,7 @@ window.addEventListener('DOMContentLoaded', () => {
   canvasManager.onSymbolTap = (x, y, event) => {
     if (isDivisionDotPosition(canvasManager.strokes, x, y, writingScale)) return false;
     const padding = event.pointerType === 'touch' ? 12 : 7;
-    const hits = canvasManager.blocks.flatMap(block => block.clusters)
+    const hits = canvasManager.blocks.flatMap(block => [...block.clusters, ...(block.answerClusters || [])])
       .filter(cluster => cluster.predictedSymbol &&
         x >= cluster.bounds.minX - padding && x <= cluster.bounds.maxX + padding &&
         y >= cluster.bounds.minY - padding && y <= cluster.bounds.maxY + padding);
@@ -231,7 +250,7 @@ window.addEventListener('DOMContentLoaded', () => {
       selectedCluster.source = 'manual';
     }
     repairCandidates = [];
-    canvasManager.blocks = splitAtEquals(pendingRows);
+    canvasManager.blocks = splitAtEquals(pendingRows, practiceMode);
     canvasManager.drawOverlay();
     showSummary();
     saveNow();
@@ -293,6 +312,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function reconsiderLocalGrouping() {
+    if (practiceMode) return;
     const patches = [];
     repairCandidates = [];
     const dpr = window.devicePixelRatio || 1;
@@ -370,7 +390,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       block.clusters.splice(candidate.index, candidate.kind === 'split' ? 1 : 2, ...replacements);
     }
-    canvasManager.blocks = splitAtEquals(pendingRows);
+    canvasManager.blocks = splitAtEquals(pendingRows, practiceMode);
     canvasManager.drawOverlay();
     showSummary();
     repairCandidates = [];
@@ -419,7 +439,7 @@ window.addEventListener('DOMContentLoaded', () => {
         cluster.automaticSource = cluster.source;
       });
       applyManualCorrections(pendingRows, manualCorrections);
-      canvasManager.blocks = splitAtEquals(pendingRows);
+      canvasManager.blocks = splitAtEquals(pendingRows, practiceMode);
       canvasManager.drawOverlay();
       showSummary();
       reconsiderLocalGrouping();
@@ -443,6 +463,100 @@ window.addEventListener('DOMContentLoaded', () => {
       Object.values(toolButtons).forEach(b => b.classList.remove('active'));
       button.classList.add('active');
       pageSurface.classList.toggle('is-moving', tool === 'move');
+    });
+  }
+  const practiceButton = document.getElementById('btn-practice');
+  const checkButton = document.getElementById('btn-check');
+  function updatePracticeControls() {
+    practiceButton.textContent = `Practice: ${practiceMode ? 'On' : 'Off'}`;
+    practiceButton.classList.toggle('active', practiceMode);
+    practiceButton.setAttribute('aria-pressed', String(practiceMode));
+    checkButton.hidden = !practiceMode;
+    canvasTip.innerHTML = practiceMode
+      ? 'Write <strong>7 × 8 =</strong>, add your answer after it, then tap Check.'
+      : 'Write <strong>18 + 4 × 3 =</strong> to begin. Tap a written symbol to correct it.';
+  }
+  updatePracticeControls();
+  practiceButton.addEventListener('click', () => {
+    practiceMode = !practiceMode;
+    try { localStorage.setItem('calcink-practice-mode', String(practiceMode)); } catch {}
+    updatePracticeControls();
+    canvasManager.blocks = splitAtEquals(pendingRows, practiceMode);
+    canvasManager.drawOverlay();
+    showSummary();
+  });
+  checkButton.addEventListener('click', () => {
+    if (!practiceMode || !canvasManager.blocks.length) return;
+    const graded = [];
+    for (const block of canvasManager.blocks) {
+      const result = gradePractice(
+        block.clusters.map(cluster => cluster.predictedSymbol),
+        (block.answerClusters || []).map(cluster => cluster.predictedSymbol));
+      block.practiceMark = result.kind === 'pending' ? null : result.kind;
+      block.practiceFeedback = result.message;
+      graded.push(result.kind);
+    }
+    canvasManager.drawOverlay();
+    showSummary();
+    if (graded.includes('correct') || graded.includes('wrong')) {
+      effects.play(graded.every(kind => kind === 'correct'));
+    }
+  });
+
+  for (const button of document.querySelectorAll('[data-color]')) {
+    button.addEventListener('click', () => {
+      canvasManager.setPenColor(button.dataset.color);
+      canvasManager.setTool('pen');
+      Object.values(toolButtons).forEach(tool => tool.classList.remove('active'));
+      toolButtons.pen.classList.add('active');
+      pageSurface.classList.remove('is-moving');
+      document.querySelectorAll('[data-color]').forEach(swatch => {
+        const active = swatch === button;
+        swatch.classList.toggle('active', active);
+        swatch.setAttribute('aria-pressed', String(active));
+      });
+    });
+  }
+
+  const soundButton = document.getElementById('btn-sound');
+  const hapticsButton = document.getElementById('btn-haptics');
+  try {
+    effects.soundEnabled = localStorage.getItem('calcink-sound') === 'true';
+    effects.hapticsEnabled = effects.hapticsEnabled && localStorage.getItem('calcink-haptics') !== 'false';
+  } catch {}
+  soundButton.classList.toggle('active', effects.soundEnabled);
+  soundButton.setAttribute('aria-pressed', String(effects.soundEnabled));
+  soundButton.querySelector('span').textContent = `Sound: ${effects.soundEnabled ? 'On' : 'Off'}`;
+  if (!window.AudioContext && !window.webkitAudioContext) {
+    effects.soundEnabled = false;
+    soundButton.disabled = true;
+    soundButton.classList.remove('active');
+    soundButton.setAttribute('aria-pressed', 'false');
+    soundButton.querySelector('span').textContent = 'Sound unavailable';
+  } else {
+    soundButton.addEventListener('click', () => {
+      effects.setSound(!effects.soundEnabled);
+      try { localStorage.setItem('calcink-sound', String(effects.soundEnabled)); } catch {}
+      soundButton.classList.toggle('active', effects.soundEnabled);
+      soundButton.setAttribute('aria-pressed', String(effects.soundEnabled));
+      soundButton.querySelector('span').textContent = `Sound: ${effects.soundEnabled ? 'On' : 'Off'}`;
+    });
+  }
+  if (!('vibrate' in navigator)) {
+    hapticsButton.disabled = true;
+    hapticsButton.title = 'Vibration is not available in this browser';
+    hapticsButton.querySelector('span').textContent = 'Haptics unavailable';
+    hapticsButton.setAttribute('aria-pressed', 'false');
+  } else {
+    hapticsButton.classList.toggle('active', effects.hapticsEnabled);
+    hapticsButton.setAttribute('aria-pressed', String(effects.hapticsEnabled));
+    hapticsButton.querySelector('span').textContent = `Haptics: ${effects.hapticsEnabled ? 'On' : 'Off'}`;
+    hapticsButton.addEventListener('click', () => {
+      effects.hapticsEnabled = !effects.hapticsEnabled;
+      try { localStorage.setItem('calcink-haptics', String(effects.hapticsEnabled)); } catch {}
+      hapticsButton.classList.toggle('active', effects.hapticsEnabled);
+      hapticsButton.setAttribute('aria-pressed', String(effects.hapticsEnabled));
+      hapticsButton.querySelector('span').textContent = `Haptics: ${effects.hapticsEnabled ? 'On' : 'Off'}`;
     });
   }
   const stylusButton = document.getElementById('btn-stylus-only');

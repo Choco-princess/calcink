@@ -34,7 +34,7 @@ Install the **LTS Windows installer** from [Node.js](https://nodejs.org/en/downl
 ```powershell
 node --version
 npm.cmd --version
-npm.cmd install
+npm.cmd ci
 npm.cmd run dev
 ```
 
@@ -47,7 +47,7 @@ Install the **LTS macOS installer** from [Node.js](https://nodejs.org/en/downloa
 ```bash
 node --version
 npm --version
-npm install
+npm ci
 npm run dev
 ```
 
@@ -67,11 +67,11 @@ In the file manager, open the extracted folder containing `package.json` and cho
 ```bash
 node --version
 npm --version
-npm install
+npm ci
 npm run dev
 ```
 
-Open the **Local** address printed by Vite. If your distribution supplies Node.js older than 18, install a current LTS release using the [official Node.js download page](https://nodejs.org/en/download) before `npm install`. On another Linux distribution, install Node.js 18 or newer and npm with its package instructions, then run the project commands above.
+Open the **Local** address printed by Vite. If your distribution supplies Node.js older than 18, install a current LTS release using the [official Node.js download page](https://nodejs.org/en/download) before `npm ci`. On another Linux distribution, install Node.js 18 or newer and npm with its package instructions, then run the project commands above.
 
 ### Chromebook, Android, iPhone, and iPad
 
@@ -103,11 +103,11 @@ Run these from the folder containing `package.json`:
 
 The build goes into `dist/`. Open the preview URL printed by Vite. On a local `localhost` preview or the public HTTPS site, wait for **Ready** and **Offline saved** before trying an offline reload. Each new device needs one successful online load first.
 
-GitHub Actions runs tests, builds, and publishes `dist/` to GitHub Pages on every push to `main`. The workflow is in `.github/workflows/pages.yml` and uses `/calcink/` as the base path. The generated `dist/` files are not committed.
+GitHub Actions uses the committed `package-lock.json` for a repeatable `npm ci` install, then runs tests, builds, and publishes `dist/` to GitHub Pages on every push to `main`. The workflow is in `.github/workflows/pages.yml` and uses `/calcink/` as the base path. The generated `dist/` files are not committed.
 
 Tests cover grouping at different sizes and pen widths, arithmetic errors, erasing, coordinates, notebook data, manual corrections, division dots, shape rules, and Practice grading. A saved real `8`/`9` drawing is a regression case. Browser checks have covered drawing, recognition, erasing, rewriting, recalculation, a phone-sized touch interaction, and offline reload. Physical testing across more phones, tablets, styluses, and writers remains useful.
 
-The CNN was adapted from the MIT-licensed [Math_Symbols_Classify project](https://github.com/rafiibnsultan/Math_Symbols_Classify). Its published dataset accuracy is not CalcInk's end-to-end accuracy. CalcInk treats its undocumented output as unknown and handles decimal dots with context. See [ARCHITECTURE.md](ARCHITECTURE.md) for the decisions and current design.
+The CNN was adapted from Rafi Ibn Sultan's MIT-licensed [Math_Symbols_Classify project](https://github.com/rafiibnsultan/Math_Symbols_Classify). The upstream copyright and license notice ships beside the model in [public/model/LICENSE](public/model/LICENSE). Its published dataset accuracy is not CalcInk's end-to-end accuracy. CalcInk treats its undocumented output as unknown and handles decimal dots with context. See [ARCHITECTURE.md](ARCHITECTURE.md) for the model architecture, choice, and current design.
 
 ## Future improvements
 

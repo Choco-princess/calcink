@@ -13,6 +13,7 @@ export default defineConfig({
         'index.html',
         'model/model.json',
         'model/group1-shard1of1.bin',
+        'model/LICENSE',
         ...Object.keys(bundle).filter(name => name !== 'sw.js')
       ];
       const version = createHash('sha256').update(JSON.stringify(files)).digest('hex').slice(0, 12);

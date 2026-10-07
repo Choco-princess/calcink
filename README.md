@@ -21,18 +21,15 @@ For `÷`, draw a horizontal bar and place a small dot above and below it. The do
 
 The public link is the easiest choice on every device. Local development needs a computer to run the web server. Do not open `index.html` directly from a file browser because the worker and offline features need a server.
 
-### Get the project and Node.js
+### Get the source
 
-1. On the [CalcInk repository](https://github.com/Choco-princess/calcink), choose **Code**, then **Download ZIP**. Extract it. The folder is normally named `calcink-main` and contains `package.json`. This route does not need Git.
-2. Install the current **LTS** release of [Node.js](https://nodejs.org/en/download). The normal Windows and macOS installers include npm. Close and reopen your terminal afterward. This project uses Vite 5, which requires Node.js 18 or newer; current LTS is the simple choice.
-3. Open a terminal in the extracted folder. The examples below use the usual Downloads location. Change the `cd` path if you extracted elsewhere.
+On the [CalcInk repository](https://github.com/Choco-princess/calcink), select **Code > Download ZIP** and extract it. Open the extracted folder that contains `package.json`. Git is not required. [Vite 5 needs Node.js 18 or newer](https://v5.vite.dev/guide/); the current Node.js LTS release meets that requirement.
 
-### Windows 10 or 11, PowerShell
+### Windows, PowerShell
 
-After running the Node.js Windows installer, open a new PowerShell window:
+Install the **LTS Windows installer** from [Node.js](https://nodejs.org/en/download). It includes npm. Close and reopen PowerShell afterward. In File Explorer, open the extracted folder containing `package.json`, click the address bar, type `powershell`, and press Enter. Then run:
 
 ```powershell
-cd "$HOME\Downloads\calcink-main"
 node --version
 npm.cmd --version
 npm.cmd install
@@ -41,12 +38,11 @@ npm.cmd run dev
 
 Open the **Local** address printed by Vite, usually `http://localhost:5173/`. Keep PowerShell open while using the site; press `Ctrl+C` to stop it. `npm.cmd` avoids PowerShell script-policy errors. If `node` or `npm.cmd` is not recognized, finish the Node installer and reopen PowerShell so its `PATH` is refreshed.
 
-### macOS, Terminal
+### macOS 13.5 or newer, Terminal
 
-After running the Node.js macOS installer, open a new Terminal window:
+Install the **LTS macOS installer** from [Node.js](https://nodejs.org/en/download). It includes npm. Open a new Terminal window, type `cd ` with a space, drag the extracted folder containing `package.json` into Terminal, and press Return. Then run:
 
 ```bash
-cd "$HOME/Downloads/calcink-main"
 node --version
 npm --version
 npm install
@@ -57,23 +53,27 @@ Open the **Local** address printed by Vite. Press `Control+C` to stop it.
 
 ### Ubuntu 24.04 or newer, or Debian 12 or newer
 
-These releases provide a compatible Node.js through their package repositories:
+These releases provide a compatible Node.js through their package repositories. Open Terminal and install Node.js and npm:
 
 ```bash
 sudo apt update
 sudo apt install -y nodejs npm
-cd "$HOME/Downloads/calcink-main"
+```
+
+In the file manager, open the extracted folder containing `package.json` and choose **Open in Terminal**. If that option is unavailable, type `cd ` in a terminal, drag that folder into the terminal, and press Enter. Then run:
+
+```bash
 node --version
 npm --version
 npm install
 npm run dev
 ```
 
-Open the **Local** address printed by Vite. If your distribution supplies Node.js older than 18, install a current LTS release using the [official Node.js download page](https://nodejs.org/en/download) before `npm install`. On another Linux distribution, follow its Node.js installation instructions, then run the commands from `cd` onward.
+Open the **Local** address printed by Vite. If your distribution supplies Node.js older than 18, install a current LTS release using the [official Node.js download page](https://nodejs.org/en/download) before `npm install`. On another Linux distribution, install Node.js 18 or newer and npm with its package instructions, then run the project commands above.
 
 ### Chromebook, Android, iPhone, and iPad
 
-Open the [public site](https://choco-princess.github.io/calcink/) in a current browser. No npm command or app-store installation is needed. Local development on ChromeOS needs its optional Linux environment; use the Debian instructions above there.
+Open the [public site](https://choco-princess.github.io/calcink/) in a current browser. No npm command or app-store installation is needed. For local development on ChromeOS, enable its optional Linux environment, make the extracted source folder available to Linux, and follow the Debian instructions above.
 
 To try a locally running version on a phone or tablet, put it and your computer on the same Wi-Fi. From the project folder, start Vite with network access:
 

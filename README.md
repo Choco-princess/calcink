@@ -13,7 +13,7 @@ Try the public website at **[choco-princess.github.io/calcink/](https://choco-pr
 | Android phone or tablet | Open a hosted HTTPS site, or a development link from a computer on the same Wi-Fi | No Node.js or app-store download on the phone/tablet |
 | iPhone or iPad | Open a hosted HTTPS site in a current browser, or a development link from a computer on the same Wi-Fi | No Node.js or app-store download on the iPhone/iPad |
 
-The interface has a touch-friendly drawing surface and a horizontally scrolling toolbar on narrow screens. It uses browser Pointer Events, Web Workers, and WebAssembly. Desktop browser flows have been exercised; **physical Android, iPhone, and iPad testing is still needed** before claiming consistent handwriting accuracy or performance on those devices. A mouse, finger, or stylus can be used.
+The interface has a touch-friendly drawing surface and a horizontally scrolling toolbar on phone and tablet screens. Swipe the tools sideways to reach all options; on a small or short screen, the page can also scroll down to the status area. It uses browser Pointer Events, Web Workers, and WebAssembly. Desktop browser flows have been exercised; **physical Android, iPhone, and iPad testing is still needed** before claiming consistent handwriting accuracy or performance on those devices. A mouse, finger, or stylus can be used.
 
 CalcInk is a website, not a native Windows, Android, or iOS application. The source is not meant to be opened by double-clicking `index.html`: browser workers and offline caching need a web server.
 

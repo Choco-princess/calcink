@@ -6,10 +6,10 @@ CalcInk is a handwriting calculator that runs in a browser. Write an arithmetic 
 
 ## Features and capabilities
 
-- **Practice mode:** Write one question per row, add your own answer after `=`, and press **Check**. The expected answer stays hidden. CalcInk shows a green tick or red cross. Optional sound gives a short ping for correct and a soft descending "fah" for wrong. A brief vibration works where the browser supports it. Sound starts off.
+- **Practice mode:** Write one question per row, add your own answer after `=`, and press **Check**. The expected answer stays hidden. CalcInk shows a green tick or red cross.
 - **Handwritten arithmetic:** Reads digits `0` to `9`, `+`, `−`, `×`, `÷`, decimal points, and `=`. It supports multi-digit numbers, negative numbers, several rows, and multiple completed equations on one row. Leave a visible gap between neighboring equations. Multiplication and division take priority over addition and subtraction.
-- **Correct a symbol:** Tap handwritten ink to choose what you meant. The answer updates immediately. **Show Recognition** displays detected symbol boxes, and **Save Sample** exports strokes and predictions for a bug report.
-- **Edit and organize:** Stroke and pixel erasers, undo and redo, multiple notebook pages, Move mode, and zoom. Pages save automatically in this browser. Export and Import move a notebook as JSON between devices.
+- **Correct a symbol:** In Pen mode, tap handwritten ink to choose what you meant. The answer updates immediately. **Show Recognition** displays detected symbol boxes and model confidence when available. Digits, including `7`, are read by the CNN rather than a forced shape rule. **Save Sample** exports strokes and predictions for a bug report.
+- **Edit and organize:** Choose a 2px or 4px pen, use the stroke or pixel eraser, undo and redo, create notebook pages, move, and zoom. Page labels close gaps after deletion. Pages save automatically in this browser. Export and Import move a notebook as JSON between devices.
 - **Use different screens:** The toolbar scrolls sideways on laptops, phones, and tablets. A mouse, finger, or stylus can draw. **Stylus only** ignores finger input on the drawing sheet while accepting pen or mouse input. It is a simple finger filter, not guaranteed hardware palm rejection.
 - **Reload offline:** After its first successful load, the public HTTPS site can cache the app and model for offline reloads. Recognition needs no account or cloud service.
 
@@ -111,7 +111,8 @@ The CNN was adapted from the MIT-licensed [Math_Symbols_Classify project](https:
 
 - Collect more labeled handwriting from different people and devices, including failures, before changing model or grouping thresholds.
 - Compare replacement or fine-tuned models on those same saved drawings. Keep the current model unless a replacement performs better in the complete app.
-- Test Practice sounds, vibration, stylus input, palm behavior, and offline use on physical Android, iPhone, and iPad devices.
+- Detect handwriting outside the supported symbol set and mark it as unknown instead of forcing it into one of the known math symbols.
+- Test stylus input, palm behavior, and offline use on physical Android, iPhone, and iPad devices.
 - Make wrong Practice answers easier to inspect while keeping the expected answer hidden.
 
 Thanks to the IITG Tech Board and the Inter IIT team for the project and the opportunity to build CalcInk.

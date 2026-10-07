@@ -12,6 +12,11 @@ export function newNotebook() {
   return { schema: 1, activePageId: page.id, pages: [page] };
 }
 
+export function renumberPages(book) {
+  book.pages.forEach((page, index) => { page.title = `Page ${index + 1}`; });
+  return book;
+}
+
 export function serializeStrokes(strokes) {
   return strokes.map(stroke => ({
     id: stroke.id, color: stroke.color, width: stroke.width,
@@ -61,7 +66,7 @@ export function validateNotebook(value) {
     }
   }
   if (!ids.has(value.activePageId)) throw new Error('This notebook has no selected page.');
-  return value;
+  return renumberPages(value);
 }
 
 function database() {

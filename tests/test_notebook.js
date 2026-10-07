@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Stroke } from '../src/segmentation/Stroke.js';
-import { newNotebook, serializeStrokes, hydrateStrokes, validateNotebook } from '../src/notebook/Notebook.js';
+import { blankPage, newNotebook, renumberPages, serializeStrokes, hydrateStrokes, validateNotebook } from '../src/notebook/Notebook.js';
 
 const book = newNotebook();
 const stroke = new Stroke(42);
@@ -16,4 +16,15 @@ assert.deepEqual(restored.points.map(({ x, y, pressure }) => ({ x, y, pressure }
 assert.ok(restored.bounds.minX < 12 && restored.bounds.maxY > 80);
 assert.throws(() => validateNotebook({ ...book, activePageId: 'missing' }));
 assert.throws(() => validateNotebook({ ...book, pages: [{ ...book.pages[0], strokes: [{ ...book.pages[0].strokes[0], points: [{ x: NaN, y: 1, pressure: 1 }] }] }] }));
+const paged = newNotebook();
+paged.pages.push(blankPage(2), blankPage(3));
+const finalId = paged.pages[2].id;
+paged.pages.splice(1, 1);
+renumberPages(paged);
+assert.deepEqual(paged.pages.map(page => page.title), ['Page 1', 'Page 2']);
+assert.equal(paged.pages[1].id, finalId);
+paged.pages.push(blankPage(paged.pages.length + 1));
+assert.deepEqual(paged.pages.map(page => page.title), ['Page 1', 'Page 2', 'Page 3']);
+paged.pages[1].title = 'Page 3';
+assert.deepEqual(validateNotebook(paged).pages.map(page => page.title), ['Page 1', 'Page 2', 'Page 3']);
 console.log('Notebook save format cases passed');

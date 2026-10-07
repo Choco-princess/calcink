@@ -2,10 +2,9 @@ import { CanvasManager } from './canvas/CanvasManager.js';
 import { PatchExtractor } from './recognition/PatchExtractor.js';
 import { Evaluator } from './evaluator/Evaluator.js';
 import { SYMBOLS, correctionKey, applyManualCorrections } from './recognition/Corrections.js';
-import { blankPage, newNotebook, serializeStrokes, hydrateStrokes, validateNotebook, loadNotebook, saveNotebook } from './notebook/Notebook.js';
+import { blankPage, newNotebook, renumberPages, serializeStrokes, hydrateStrokes, validateNotebook, loadNotebook, saveNotebook } from './notebook/Notebook.js';
 import { isDivisionDotPosition, isDirectBarInkTap } from './canvas/DivisionDot.js';
 import { practiceRow, gradePractice } from './evaluator/Practice.js';
-import { FeedbackEffects } from './ui/FeedbackEffects.js';
 
 function splitAtEquals(rows, practiceMode = false) {
   const blocks = [];
@@ -74,7 +73,6 @@ window.addEventListener('DOMContentLoaded', () => {
   let loadingPage = false;
   let persistenceAvailable = true;
   let practiceMode = false;
-  const effects = new FeedbackEffects();
   try { practiceMode = localStorage.getItem('calcink-practice-mode') === 'true'; } catch {}
   overlayCanvas.style.pointerEvents = 'none';
 
@@ -494,63 +492,16 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   checkButton.addEventListener('click', () => {
     if (!practiceMode || !canvasManager.blocks.length) return;
-    const graded = [];
     for (const block of canvasManager.blocks) {
       const result = gradePractice(
         block.clusters.map(cluster => cluster.predictedSymbol),
         (block.answerClusters || []).map(cluster => cluster.predictedSymbol));
       block.practiceMark = result.kind === 'pending' ? null : result.kind;
       block.practiceFeedback = result.message;
-      graded.push(result.kind);
     }
     canvasManager.drawOverlay();
     showSummary();
-    if (graded.includes('correct') || graded.includes('wrong')) {
-      effects.play(graded.every(kind => kind === 'correct'));
-    }
   });
-
-  const soundButton = document.getElementById('btn-sound');
-  const hapticsButton = document.getElementById('btn-haptics');
-  try {
-    effects.soundEnabled = localStorage.getItem('calcink-sound') === 'true';
-    effects.hapticsEnabled = effects.hapticsEnabled && localStorage.getItem('calcink-haptics') !== 'false';
-  } catch {}
-  soundButton.classList.toggle('active', effects.soundEnabled);
-  soundButton.setAttribute('aria-pressed', String(effects.soundEnabled));
-  soundButton.querySelector('span').textContent = `Sound: ${effects.soundEnabled ? 'On' : 'Off'}`;
-  if (!window.AudioContext && !window.webkitAudioContext) {
-    effects.soundEnabled = false;
-    soundButton.disabled = true;
-    soundButton.classList.remove('active');
-    soundButton.setAttribute('aria-pressed', 'false');
-    soundButton.querySelector('span').textContent = 'Sound unavailable';
-  } else {
-    soundButton.addEventListener('click', () => {
-      effects.setSound(!effects.soundEnabled);
-      try { localStorage.setItem('calcink-sound', String(effects.soundEnabled)); } catch {}
-      soundButton.classList.toggle('active', effects.soundEnabled);
-      soundButton.setAttribute('aria-pressed', String(effects.soundEnabled));
-      soundButton.querySelector('span').textContent = `Sound: ${effects.soundEnabled ? 'On' : 'Off'}`;
-    });
-  }
-  if (!('vibrate' in navigator)) {
-    hapticsButton.disabled = true;
-    hapticsButton.title = 'Vibration is not available in this browser';
-    hapticsButton.querySelector('span').textContent = 'Haptics unavailable';
-    hapticsButton.setAttribute('aria-pressed', 'false');
-  } else {
-    hapticsButton.classList.toggle('active', effects.hapticsEnabled);
-    hapticsButton.setAttribute('aria-pressed', String(effects.hapticsEnabled));
-    hapticsButton.querySelector('span').textContent = `Haptics: ${effects.hapticsEnabled ? 'On' : 'Off'}`;
-    hapticsButton.addEventListener('click', () => {
-      effects.hapticsEnabled = !effects.hapticsEnabled;
-      try { localStorage.setItem('calcink-haptics', String(effects.hapticsEnabled)); } catch {}
-      hapticsButton.classList.toggle('active', effects.hapticsEnabled);
-      hapticsButton.setAttribute('aria-pressed', String(effects.hapticsEnabled));
-      hapticsButton.querySelector('span').textContent = `Haptics: ${effects.hapticsEnabled ? 'On' : 'Off'}`;
-    });
-  }
   const stylusButton = document.getElementById('btn-stylus-only');
   stylusButton.addEventListener('click', () => {
     canvasManager.setStylusOnly(!canvasManager.stylusOnly);
@@ -573,6 +524,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-delete-page').addEventListener('click', () => {
     if (book.pages.length < 2 || !window.confirm(`Delete ${currentPage().title}?`)) return;
     book.pages = book.pages.filter(page => page.id !== book.activePageId);
+    renumberPages(book);
     book.activePageId = book.pages.at(-1).id;
     loadPage();
     saveNow();

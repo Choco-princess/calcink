@@ -25,26 +25,10 @@ function overlapX(a, b) {
   return Math.max(0, Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX));
 }
 
-function seven(strokes, bounds, scale) {
-  const height = bounds.maxY - bounds.minY;
-  if (height < scale * 0.48) return false;
-  const points = strokes.flatMap(s => s.points);
-  const top = points.filter(p => p.y <= bounds.minY + height * 0.22);
-  const bottom = points.filter(p => p.y >= bounds.minY + height * 0.75);
-  if (top.length < 2 || bottom.length < 1) return false;
-  const topSpan = Math.max(...top.map(p => p.x)) - Math.min(...top.map(p => p.x));
-  if (topSpan < scale * 0.33) return false;
-  if (bottom.length > 1 && Math.max(...bottom.map(p => p.x)) - Math.min(...bottom.map(p => p.x)) > scale * 0.3) return false;
-  const topRight = Math.max(...top.map(p => p.x));
-  const bottomX = bottom.reduce((n, p) => n + p.x, 0) / bottom.length;
-  return topRight - bottomX > scale * 0.24;
-}
-
-export function suggestShapeSymbol(strokes, bounds, scale) {
+export function suggestShapeSymbol(strokes, _bounds, scale) {
   if (!strokes.length) return null;
   if (strokes.length === 1) {
     if (horizontal(strokes[0], scale)) return '-';
-    if (seven(strokes, bounds, scale)) return '7';
     return null;
   }
   if (strokes.length === 2) {
@@ -66,7 +50,6 @@ export function suggestShapeSymbol(strokes, bounds, scale) {
           crossY > stemBounds.minY + size(stem).height * 0.28 &&
           crossY < stemBounds.maxY - size(stem).height * 0.28) return '+';
     }
-    if (seven(strokes, bounds, scale)) return '7';
     return null;
   }
   if (strokes.length === 3) {

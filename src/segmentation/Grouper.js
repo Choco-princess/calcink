@@ -84,11 +84,11 @@ function joinScore(a, b, scale) {
   const dotA = a.every(s => Math.max(s.widthPx, s.heightPx) <= Math.max(10, scale * 0.24));
   const dotB = b.every(s => Math.max(s.widthPx, s.heightPx) <= Math.max(10, scale * 0.24));
 
-  // A decimal mark remains separate; a dot joins a bar only when centered on it.
+  // A decimal mark remains separate; a dot joins a bar only when close to its middle.
   if ((dotA && barB) || (dotB && barA)) {
     const dot = dotA ? ba : bb, bar = (dotA ? barB : barA).bounds;
-    return Math.abs(centerX(dot) - centerX(bar)) <= width(bar) * 0.35 &&
-      yGap <= scale * 0.8 && height(combined) <= scale * 1.7 ? 80 : 0;
+    return Math.abs(centerX(dot) - centerX(bar)) <= width(bar) * 0.45 &&
+      yGap <= scale * 0.95 && height(combined) <= scale * 2.1 ? 80 : 0;
   }
   if (dotA || dotB) return 0;
 

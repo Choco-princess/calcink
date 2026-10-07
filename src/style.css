@@ -45,6 +45,7 @@ header {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .logo-title {
@@ -67,8 +68,21 @@ header {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) #e2e8f0;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
+.toolbar::-webkit-scrollbar { height: 8px; }
+.toolbar::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 999px; }
+.toolbar::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 999px; }
+.tool-group { flex: 0 0 auto; }
+.divider { flex: 0 0 1px; }
 
 .toolbar-hint { display: none; }
 
@@ -100,21 +114,6 @@ header {
   border-radius: 8px;
   gap: 2px;
 }
-.color-swatch {
-  width: 44px;
-  min-width: 44px;
-  padding: 0;
-}
-.color-swatch::before {
-  content: '';
-  width: 23px;
-  height: 23px;
-  border-radius: 50%;
-  background: var(--swatch);
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px #94a3b8;
-}
-.color-swatch.active::before { box-shadow: 0 0 0 2px var(--primary); }
 
 .btn {
   display: inline-flex;
@@ -325,20 +324,8 @@ footer {
   }
   .logo-area { margin-bottom: 6px; }
   .toolbar {
-    overflow-x: auto;
-    overflow-y: hidden;
     width: 100%;
-    padding-bottom: 5px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--primary) #e2e8f0;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
   }
-  .toolbar::-webkit-scrollbar { height: 7px; }
-  .toolbar::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 999px; }
-  .toolbar::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 999px; }
-  .tool-group { flex: 0 0 auto; }
-  .divider { flex: 0 0 1px; }
   .toolbar-hint {
     display: block;
     margin-top: 2px;

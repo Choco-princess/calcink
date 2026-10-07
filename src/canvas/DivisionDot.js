@@ -12,7 +12,16 @@ export function isDivisionDotPosition(strokes, x, y, scale) {
         height > Math.max(9, scale * 0.25) || width < height * 2.8) return false;
     const dx = Math.abs(x - (b.minX + b.maxX) / 2);
     const dy = Math.abs(y - (b.minY + b.maxY) / 2);
-    return dx <= width * 0.35 && dy >= Math.max(6, scale * 0.1) &&
-      dy <= Math.max(18, scale * 0.8);
+    return dx <= width * 0.45 && dy >= Math.max(6, scale * 0.1) &&
+      dy <= Math.max(18, scale);
   });
+}
+
+// A bar's bounding rectangle extends well beyond its painted pixels on a
+// touch screen. Require contact with actual ink before opening correction.
+export function isDirectBarInkTap(cluster, strokes, x, y, pointerType) {
+  if (cluster.predictedSymbol !== '-' && cluster.predictedSymbol !== '÷') return true;
+  const ids = new Set(cluster.strokeIds);
+  const radius = pointerType === 'touch' ? 4 : 3;
+  return strokes.some(stroke => ids.has(stroke.id) && strokeTouchesCircle(stroke, x, y, radius));
 }

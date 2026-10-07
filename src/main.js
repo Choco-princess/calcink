@@ -3,7 +3,7 @@ import { PatchExtractor } from './recognition/PatchExtractor.js';
 import { Evaluator } from './evaluator/Evaluator.js';
 import { SYMBOLS, correctionKey, applyManualCorrections } from './recognition/Corrections.js';
 import { blankPage, newNotebook, serializeStrokes, hydrateStrokes, validateNotebook, loadNotebook, saveNotebook } from './notebook/Notebook.js';
-import { isDivisionDotPosition } from './canvas/DivisionDot.js';
+import { isDivisionDotPosition, isDirectBarInkTap } from './canvas/DivisionDot.js';
 import { practiceRow, gradePractice } from './evaluator/Practice.js';
 import { FeedbackEffects } from './ui/FeedbackEffects.js';
 
@@ -206,7 +206,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const hits = canvasManager.blocks.flatMap(block => [...block.clusters, ...(block.answerClusters || [])])
       .filter(cluster => cluster.predictedSymbol &&
         x >= cluster.bounds.minX - padding && x <= cluster.bounds.maxX + padding &&
-        y >= cluster.bounds.minY - padding && y <= cluster.bounds.maxY + padding);
+        y >= cluster.bounds.minY - padding && y <= cluster.bounds.maxY + padding &&
+        isDirectBarInkTap(cluster, canvasManager.strokes, x, y, event.pointerType));
     if (!hits.length) return false;
     hits.sort((a, b) => {
       const distance = cluster => {
@@ -457,6 +458,12 @@ window.addEventListener('DOMContentLoaded', () => {
     'pixel-eraser': document.getElementById('btn-pixel-eraser'),
     move: document.getElementById('btn-move')
   };
+  const toolbar = document.querySelector('.toolbar');
+  toolbar.addEventListener('wheel', event => {
+    if (toolbar.scrollWidth <= toolbar.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    toolbar.scrollLeft += event.deltaY;
+  }, { passive: false });
   for (const [tool, button] of Object.entries(toolButtons)) {
     button.addEventListener('click', () => {
       canvasManager.setTool(tool);
@@ -502,21 +509,6 @@ window.addEventListener('DOMContentLoaded', () => {
       effects.play(graded.every(kind => kind === 'correct'));
     }
   });
-
-  for (const button of document.querySelectorAll('[data-color]')) {
-    button.addEventListener('click', () => {
-      canvasManager.setPenColor(button.dataset.color);
-      canvasManager.setTool('pen');
-      Object.values(toolButtons).forEach(tool => tool.classList.remove('active'));
-      toolButtons.pen.classList.add('active');
-      pageSurface.classList.remove('is-moving');
-      document.querySelectorAll('[data-color]').forEach(swatch => {
-        const active = swatch === button;
-        swatch.classList.toggle('active', active);
-        swatch.setAttribute('aria-pressed', String(active));
-      });
-    });
-  }
 
   const soundButton = document.getElementById('btn-sound');
   const hapticsButton = document.getElementById('btn-haptics');

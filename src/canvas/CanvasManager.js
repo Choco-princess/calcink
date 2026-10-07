@@ -421,10 +421,6 @@ export class CanvasManager {
     this.options.penWidth = width;
   }
 
-  setPenColor(color) {
-    this.options.penColor = color;
-  }
-
   toggleBoundingBoxes(show) {
     this.options.showBoundingBoxes = show;
     this.drawOverlay();

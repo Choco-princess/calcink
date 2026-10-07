@@ -58,12 +58,13 @@ export class PatchExtractor {
     let tensorIdx = 0;
 
     for (let i = 0; i < pixels.length; i += 4) {
-      // The model learned dark ink on white paper. Colored display ink is
-      // normalized to dark neutral ink so blue/red/green pens stay readable.
-      const intensity = Math.min(pixels[i], pixels[i + 1], pixels[i + 2]) / 255.0;
-      tensorData[tensorIdx++] = intensity;
-      tensorData[tensorIdx++] = intensity;
-      tensorData[tensorIdx++] = intensity;
+      const r = pixels[i] / 255.0;
+      const g = pixels[i + 1] / 255.0;
+      const b = pixels[i + 2] / 255.0;
+
+      tensorData[tensorIdx++] = r;
+      tensorData[tensorIdx++] = g;
+      tensorData[tensorIdx++] = b;
     }
 
     return tensorData;

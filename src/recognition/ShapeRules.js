@@ -79,8 +79,8 @@ export function suggestShapeSymbol(strokes, bounds, scale) {
       const centerY = size(bar).centerY;
       if (size(a).centerY < centerY - scale * 0.08 &&
           size(b).centerY > centerY + scale * 0.08 &&
-          Math.abs(size(a).centerX - centerX) < scale * 0.18 &&
-          Math.abs(size(b).centerX - centerX) < scale * 0.18) return '÷';
+          Math.abs(size(a).centerX - centerX) < size(bar).width * 0.45 &&
+          Math.abs(size(b).centerX - centerX) < size(bar).width * 0.45) return '÷';
     }
   }
   return null;

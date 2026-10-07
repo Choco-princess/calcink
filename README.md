@@ -2,7 +2,7 @@
 
 CalcInk is a browser scratchpad for handwritten arithmetic. Draw an expression ending in `=` and the answer appears beside it. Drawing, handwriting recognition, and calculation run on your device; the app does not send your ink to a server.
 
-This repository contains the source code, a local development server, a production build, tests, and the pretrained recognition model. The source is available at [github.com/Choco-princess/calcink](https://github.com/Choco-princess/calcink). A public website requires GitHub Pages to be enabled as described below.
+Try the public website at **[choco-princess.github.io/calcink/](https://choco-princess.github.io/calcink/)**. This repository contains its source code, local development server, production build, tests, and pretrained recognition model.
 
 ## Which devices can use it?
 
@@ -118,4 +118,4 @@ No account, cloud API, or model download at inference time is required by the bu
 
 `npm run build` produces a static site in `dist/`. A host must serve **all** of `dist/`, including `sw.js`, `model/`, and `assets/`, over HTTPS. The generated directory is not committed: GitHub Actions builds and publishes it from the source files.
 
-The repository includes a workflow at `.github/workflows/pages.yml`. In the repository's **Settings → Pages**, set **Build and deployment → Source** to **GitHub Actions**. Then run **Actions → Build and deploy CalcInk → Run workflow**, or push a new change to `main`. When the deployment succeeds, open [choco-princess.github.io/calcink/](https://choco-princess.github.io/calcink/). The workflow sets `CALCINK_BASE=/calcink/` for that address; change it if the repository name changes. Check **Ready • Offline saved**, write `1 + 1 =`, and test an offline reload after the first successful visit. The URL will not work until Pages is enabled and the workflow deploys successfully.
+The repository is public and GitHub Pages is enabled with **GitHub Actions** as its source. The workflow at `.github/workflows/pages.yml` tests, builds, and publishes the site after each push to `main`; it can also be run from the repository's **Actions** tab. It sets `CALCINK_BASE=/calcink/` for the current address; change that setting if the repository name changes. On the live site, check **Ready • Offline saved**, write `1 + 1 =`, and test an offline reload after the first successful visit. A successful workflow run is required before new changes appear online.

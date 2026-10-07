@@ -8,12 +8,14 @@ CalcInk is a handwriting calculator that runs in a browser. Write an arithmetic 
 
 - **Practice mode:** Write one question per row, add your own answer after `=`, and press **Check**. The expected answer stays hidden. CalcInk shows a green tick or red cross.
 - **Handwritten arithmetic:** Reads digits `0` to `9`, `+`, `−`, `×`, `÷`, decimal points, and `=`. It supports multi-digit numbers, negative numbers, several rows, and multiple completed equations on one row. Leave a visible gap between neighboring equations. Multiplication and division take priority over addition and subtraction.
-- **Correct a symbol:** In Pen mode, tap handwritten ink to choose what you meant. The answer updates immediately. **Show Recognition** displays detected symbol boxes and model confidence when available. Digits, including `7`, are read by the CNN rather than a forced shape rule. **Save Sample** exports strokes and predictions for a bug report.
+- **Correct a symbol:** In Pen mode, tap handwritten ink to choose what you meant. The answer updates immediately. **Show Recognition** displays detected symbol boxes and model confidence when available. A clear top-bar `7` may be identified by a geometry rule, so it has no model confidence score. **Save Sample** exports strokes and predictions for a bug report.
 - **Edit and organize:** Choose a 2px or 4px pen, use the stroke or pixel eraser, undo and redo, create notebook pages, move, and zoom. Page labels close gaps after deletion. Pages save automatically in this browser. Export and Import move a notebook as JSON between devices.
 - **Use different screens:** The toolbar scrolls sideways on laptops, phones, and tablets. A mouse, finger, or stylus can draw. **Stylus only** ignores finger input on the drawing sheet while accepting pen or mouse input. It is a simple finger filter, not guaranteed hardware palm rejection.
 - **Reload offline:** After its first successful load, the public HTTPS site can cache the app and model for offline reloads. Recognition needs no account or cloud service.
 
 Write mostly horizontal equations with moderate tilt. Each expression needs a final `=`. An unfinished one stays pending, malformed input shows `Error`, and division by zero shows `Undefined`. Results display up to four decimal places. Parentheses, powers, variables, and deliberately overlapping neighboring symbols are outside this version's scope. Handwriting accuracy varies by writer.
+
+While a digit is being drawn, an unfinished `5` or similar shape may briefly match the `7` rule. Finish the digit before judging its label, or tap the ink to correct it if the final label is wrong.
 
 For `÷`, draw a horizontal bar and place a small dot above and below it. The dots may be slightly off center. A tap near the bar adds ink; a tap on the painted bar opens symbol correction.
 

@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test_grouper.js && node test_evaluator.js && node test_eraser.js && node test_coordinates.js && node test_shapes.js && node test_corrections.js && node test_notebook.js && node test_division_dot.js && node test_practice.js"
+    "test": "node tests/test_grouper.js && node tests/test_evaluator.js && node tests/test_eraser.js && node tests/test_coordinates.js && node tests/test_shapes.js && node tests/test_corrections.js && node tests/test_notebook.js && node tests/test_division_dot.js && node tests/test_practice.js"
   },
   "devDependencies": {
     "vite": "^5.4.0"

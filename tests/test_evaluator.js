@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Evaluator } from './src/evaluator/Evaluator.js';
+import { Evaluator } from '../src/evaluator/Evaluator.js';
 assert.equal(Evaluator.analyze(['1', '+']).feedback, 'Keep writing; finish with =.');
 assert.equal(Evaluator.analyze(['1', '÷', '0', '=']).feedback, 'Division by zero is undefined.');
 

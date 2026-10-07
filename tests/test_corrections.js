@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Evaluator } from './src/evaluator/Evaluator.js';
-import { SYMBOLS, correctionKey, applyManualCorrections } from './src/recognition/Corrections.js';
+import { Evaluator } from '../src/evaluator/Evaluator.js';
+import { SYMBOLS, correctionKey, applyManualCorrections } from '../src/recognition/Corrections.js';
 
 assert.equal(SYMBOLS.length, 16);
 const clusters = [

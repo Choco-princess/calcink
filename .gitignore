@@ -2,3 +2,9 @@ node_modules/
 dist/
 .DS_Store
 *.log
+/PROJECT_JOURNEY.md
+/convert_to_tfjs.py
+/model.json
+/modelWeight_dataset3.h5
+/pnpm-lock.yaml
+/pnpm-workspace.yaml

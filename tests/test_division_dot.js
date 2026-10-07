@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { Stroke } from './src/segmentation/Stroke.js';
-import { isDivisionDotPosition, isDirectBarInkTap } from './src/canvas/DivisionDot.js';
-import { Grouper } from './src/segmentation/Grouper.js';
-import { suggestShapeSymbol } from './src/recognition/ShapeRules.js';
+import { Stroke } from '../src/segmentation/Stroke.js';
+import { isDivisionDotPosition, isDirectBarInkTap } from '../src/canvas/DivisionDot.js';
+import { Grouper } from '../src/segmentation/Grouper.js';
+import { suggestShapeSymbol } from '../src/recognition/ShapeRules.js';
 
 function stroke(points, width = 4) {
   const result = new Stroke();

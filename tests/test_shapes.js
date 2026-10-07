@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Stroke } from './src/segmentation/Stroke.js';
-import { suggestShapeSymbol } from './src/recognition/ShapeRules.js';
+import { Stroke } from '../src/segmentation/Stroke.js';
+import { suggestShapeSymbol } from '../src/recognition/ShapeRules.js';
 
 const fixtures = [
   { name: 'minus, not division', lines: [[[0, 20], [40, 20]]], expected: '-' },

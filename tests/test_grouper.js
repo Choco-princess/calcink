@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { Stroke } from './src/segmentation/Stroke.js';
-import { Grouper } from './src/segmentation/Grouper.js';
+import { Stroke } from '../src/segmentation/Stroke.js';
+import { Grouper } from '../src/segmentation/Grouper.js';
 
 // Saved vector drawings. Each nested expected group lists the input stroke
 // indices in one symbol; outer groups are equation blocks in reading order.
@@ -70,7 +70,7 @@ for (const fixture of fixtures) {
   }
 }
 
-const saved = JSON.parse(readFileSync(new URL('./samples/user-8-9-2026-10-05.json', import.meta.url), 'utf8'));
+const saved = JSON.parse(readFileSync(new URL('../samples/user-8-9-2026-10-05.json', import.meta.url), 'utf8'));
 const savedStrokes = saved.strokes.map(raw => makeStroke(raw.points.map(p => [p.x, p.y]), 1, raw.width));
 const savedGroups = Grouper.groupStrokesIntoLines(savedStrokes);
 assert.deepEqual(savedGroups.map(row => row.clusters.map(cluster =>

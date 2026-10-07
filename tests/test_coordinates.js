@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { backingSize, pointerPosition, pixelCrop } from './src/canvas/coordinates.js';
+import { backingSize, pointerPosition, pixelCrop } from '../src/canvas/coordinates.js';
 
 assert.deepEqual(pointerPosition(140, 250, { left: 100, top: 200 }), { x: 40, y: 50 });
 assert.deepEqual(pointerPosition(140, 250, { left: 100, top: 200, width: 550, height: 400 }, 1100, 800), { x: 80, y: 100 });

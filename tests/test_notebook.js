@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Stroke } from './src/segmentation/Stroke.js';
-import { newNotebook, serializeStrokes, hydrateStrokes, validateNotebook } from './src/notebook/Notebook.js';
+import { Stroke } from '../src/segmentation/Stroke.js';
+import { newNotebook, serializeStrokes, hydrateStrokes, validateNotebook } from '../src/notebook/Notebook.js';
 
 const book = newNotebook();
 const stroke = new Stroke(42);

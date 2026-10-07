@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { practiceRow, gradePractice } from './src/evaluator/Practice.js';
+import { practiceRow, gradePractice } from '../src/evaluator/Practice.js';
 
 const symbols = ['7', '×', '8', '=', '5', '6'];
 const row = { clusters: symbols.map((predictedSymbol, index) => ({ predictedSymbol, bounds: { minX: index * 20 } })) };

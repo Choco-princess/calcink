@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Stroke } from './src/segmentation/Stroke.js';
-import { eraseStrokePixels, strokeTouchesCircle } from './src/canvas/Eraser.js';
+import { Stroke } from '../src/segmentation/Stroke.js';
+import { eraseStrokePixels, strokeTouchesCircle } from '../src/canvas/Eraser.js';
 
 const stroke = new Stroke();
 stroke.width = 4;

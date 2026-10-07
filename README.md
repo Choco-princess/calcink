@@ -1,134 +1,121 @@
-# CalcInk: On-Device Handwritten Math Calculator
+# CalcInk
 
-**CalcInk** is a responsive, web-based digital mathematical notebook that interprets handwritten mathematical equations in real time and projects deterministic calculated results directly onto the canvas.
+CalcInk is a browser scratchpad for handwritten arithmetic. Draw an expression ending in `=` and the answer appears beside it. Drawing, handwriting recognition, and calculation run on your device; the app does not send your ink to a server.
 
-Built for the **Inter IIT Tech Meet 15.0 (Bootcamp - Phase 1 Software PS)**.
+This repository contains the source code, a local development server, a production build, tests, and the pretrained recognition model. The source is available at [github.com/Choco-princess/calcink](https://github.com/Choco-princess/calcink). A public website requires GitHub Pages to be enabled as described below.
 
----
+## Which devices can use it?
 
-## 🌟 Key Features
+| Device | How to use CalcInk | What to install |
+| --- | --- | --- |
+| Windows, macOS, or Linux laptop/desktop | Run the project locally in a current browser, or later open a hosted HTTPS site | [Node.js LTS](https://nodejs.org/en/download) and its included npm are needed **only** to run or build this repository |
+| Chromebook / ChromeOS | Open a hosted HTTPS site or a LAN link from another computer | Nothing on the Chromebook; local development would need a Node-capable Linux environment |
+| Android phone or tablet | Open a hosted HTTPS site, or a development link from a computer on the same Wi-Fi | No Node.js or app-store download on the phone/tablet |
+| iPhone or iPad | Open a hosted HTTPS site in a current browser, or a development link from a computer on the same Wi-Fi | No Node.js or app-store download on the iPhone/iPad |
 
-* **100% Client-Side & Offline:** All workloads—stroke capture, image preprocessing, convolutional neural network inference, and mathematical evaluation—run entirely inside the browser with zero cloud/API dependencies.
-* **60 FPS Fluid Digital Ink Canvas:** High-DPI/Retina display scaling (`window.devicePixelRatio`) with smooth quadratic Bézier curve interpolation, undo/redo history, stroke-based erasing, and customizable pen thickness.
-* **Two-Tier Hybrid Stroke Segregation:**
-  * *Tier 1 (2D Equation Block Slicing):* Distinguishes independent horizontal rows and side-by-side scratchpad equations.
-  * *Tier 2 (Anisotropic Directional Morphological Clustering):* Bridges stacked multi-stroke symbols (`=`, `÷`, `1` with base `_`, `5` with top hat) while strictly preventing horizontal domino bleeding between adjacent characters.
-* **On-Device 16-Symbol CNN:** WebGL hardware-accelerated classification (<3ms per character) across:
-  * Digits: `0, 1, 2, 3, 4, 5, 6, 7, 8, 9`
-  * Operators: `+, -, ×, ÷, ., =`
-* **Deterministic BODMAS Evaluation:** Safe, sandboxed arithmetic evaluator (zero `eval()`) supporting multi-digit numbers, floating-point decimals, unary negatives, strict operator precedence, and graceful division-by-zero (`Undefined`) handling.
-* **Dynamic Inline Canvas Projection:** Evaluated answers are projected in real time onto the canvas surface adjacent to the terminal `=` sign.
+The interface has a touch-friendly drawing surface and a horizontally scrolling toolbar on narrow screens. It uses browser Pointer Events, Web Workers, and WebAssembly. Desktop browser flows have been exercised; **physical Android, iPhone, and iPad testing is still needed** before claiming consistent handwriting accuracy or performance on those devices. A mouse, finger, or stylus can be used.
 
----
+CalcInk is a website, not a native Windows, Android, or iOS application. The source is not meant to be opened by double-clicking `index.html`: browser workers and offline caching need a web server.
 
-## 🚀 Quick Start (Local Setup)
+## Run it on a computer
 
-The application runs using native browser ES modules with zero build overhead.
+1. Install the **LTS** version of [Node.js](https://nodejs.org/en/download) for your operating system. npm should be included. Close and reopen your terminal after installing it.
+2. Open a terminal in the folder containing `package.json`. In the current Windows checkout, that folder is `C:\Users\Derek\Downloads\calcink\calcink` (there are two `calcink` folders).
+3. Check that both commands work, install the packages, and start the app:
 
-### Option 1: Python HTTP Server (Recommended)
-```bash
-# Clone the repository
-git clone https://github.com/Choco-princess/calcink.git
-cd calcink
+**Windows PowerShell**
 
-# Start local server
-python3 -m http.server 8080
+```powershell
+cd C:\Users\Derek\Downloads\calcink\calcink
+node --version
+npm.cmd --version
+npm.cmd install
+npm.cmd run dev
 ```
-Open [http://localhost:8080](http://localhost:8080) in your web browser.
 
-### Option 2: Node.js / NPM
+**macOS Terminal or Linux shell**
+
 ```bash
-# Install development dependencies
+cd /path/to/the/calcink-folder-containing-package.json
+node --version
+npm --version
 npm install
-
-# Run local development server
 npm run dev
 ```
 
----
+Open the **Local** URL printed by Vite in a browser on that computer. Vite commonly uses `http://localhost:5173/`, but it may choose another port; use the printed URL. The previously opened local demo on this computer was `http://127.0.0.1:4173/` and is available only while its server is running. Press `Ctrl+C` in the terminal to stop a server you started there.
 
-## 🧪 Automated Test Suites
+The project uses Vite 5, whose [documented minimum is Node 18](https://v5.vite.dev/guide/). Installing a current Node LTS release is the simpler choice for a new setup. No Python, GPU, or external recognition service is required to run the browser app.
 
-The repository contains automated unit and integration test suites validating the segmentation engine and the arithmetic evaluator:
+### If `npm` is not recognized on Windows
+
+That error means PowerShell cannot find npm. Install Node.js LTS, reopen PowerShell, then run `node --version` and `npm.cmd --version` again. If `node` still cannot be found, check that the Node installation directory is on your system `PATH` or rerun the official installer. Make sure you are in the folder with `package.json` before `npm.cmd install`.
+
+If PowerShell instead says `npm.ps1` cannot be loaded because scripts are disabled, use `npm.cmd` as shown above. You do not need to change the machine's execution policy for CalcInk.
+
+## Try it on a phone or tablet before hosting
+
+The computer serves the app; the phone or tablet only opens it in a browser.
+
+1. Connect both devices to the same local network. On the computer, start Vite so it accepts connections from that network:
+
+   - Windows PowerShell: `npm.cmd run dev -- --host 0.0.0.0`
+   - macOS/Linux: `npm run dev -- --host 0.0.0.0`
+
+2. Find the computer's private network address. On Windows run `ipconfig`; on macOS check **System Settings → Network**; on Linux check network settings or run `hostname -I`. It usually starts with `192.168.` or `10.`.
+3. On the phone or tablet, open `http://COMPUTER-IP:PORT/`, replacing both parts with that address and the port printed by Vite. For example, if the computer is `192.168.1.23` and Vite prints port `5173`, open `http://192.168.1.23:5173/`.
+
+Do not type `127.0.0.1` or `localhost` on the phone; there, those names refer to the **phone itself**. If the page does not open, check the computer firewall's permission for a private network, the address and port, and whether the Wi-Fi separates devices on a guest network. Vite documents `--host 0.0.0.0` for [LAN access](https://vite.dev/config/server-options).
+
+This LAN link is for **live testing while the computer stays on**. It is not a published website, and a phone loading it over plain HTTP should not be expected to cache the app for offline use. Offline service workers require [HTTPS or the device's own localhost](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API).
+
+## How to use the calculator
+
+- Choose **Pen** and a 2, 4, or 7 pixel line width. Write mostly horizontal expressions. Different equations may share a row; leave a visible gap and end each completed one with `=`.
+- **Stroke Eraser** removes an entire touched stroke. **Pixel Eraser** removes only the touched part. Undo, redo, clear, and a bounding-box toggle are also in the toolbar. On a narrow screen, swipe the toolbar sideways to reach more controls.
+- Keyboard shortcuts on a computer: `Ctrl/Cmd+Z` to undo, `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` to redo.
+- Supported writing: digits `0–9`, `+`, `−`, `×`, `÷`, a decimal point, and terminal `=`. Multi-digit and decimal numbers and a leading minus are supported. Parentheses, variables, powers, and symbols drawn across neighboring symbols are outside this version's scope.
+- A partial expression has no answer yet. A malformed completed expression shows `Error`; division by zero shows `Undefined`. Multiplication and division take priority over addition and subtraction. Answers are displayed to at most four decimal places.
+- If a label is wrong, check its dashed box first. A wrong box means grouping failed; a correct box with the wrong label means recognition failed. Click **Save Sample** to show the stroke data and predictions. Download the JSON or copy it from the dialog, then say what you intended to write. This is a **diagnostic export**, not a way to reopen a drawing in the app.
+
+The canvas is not saved automatically between page reloads. Export a sample before refreshing if you need to preserve evidence of a mistake.
+
+## Build and check offline use
+
+On the computer, run:
+
+**Windows PowerShell**
+
+```powershell
+npm.cmd run build
+npm.cmd run preview
+```
+
+**macOS/Linux**
 
 ```bash
-# Run stroke clustering & multi-line segmentation tests
-node test_grouper.js
-
-# Run BODMAS arithmetic evaluator tests
-node test_evaluator.js
+npm run build
+npm run preview
 ```
 
----
+Open the URL printed by the preview server on **that computer**. Wait for **Ready • Offline saved**, then disconnect the network and reload. The production service worker caches the page, model, worker, and runtime files. The development server from `npm run dev` is not the offline build. The first visit needs a connection to the server, and the server must still be available when testing a brand-new browser or device.
 
-## 🏗️ Architecture & Data Flow
+A public HTTPS deployment can offer the same offline reload on each device **after that device has loaded and cached the page**. A plain `http://COMPUTER-IP` LAN link is not equivalent, because service workers need a secure context. Browser storage may also be cleared by the user or the operating system, so keep the source site available for a later reload.
 
-```
-[ Freehand Canvas Drawing ]
-            │
-            ▼
-[ Tier 1: 2D Spatial & Y-Valley Equation Slicing ]
-            │ (Segments canvas into independent equation lines & blocks)
-            ▼
-[ Tier 2: Anisotropic Directional Morphological Clustering ]
-            │ (Groups multi-stroke characters into Left-to-Right clusters)
-            ▼
-[ Patch Extractor & Normalizer (50x50x3 RGB) ]
-            │
-            ▼
-[ On-Device TensorFlow.js CNN Inference (WebGL GPU) ]
-            │ (Outputs 16-class probability distribution <3ms)
-            ▼
-[ Deterministic BODMAS / PEMDAS Evaluator ]
-            │ (Multi-digit tokenization, operator precedence, zero division check)
-            ▼
-[ Dynamic Canvas Surface Projection ]
-   (Renders answer inline right next to the terminal '=' sign)
-```
+## Tests and current evidence
 
-For a comprehensive log of design iterations, edge case analyses, and mathematical derivations, see [ARCHITECTURE.md](ARCHITECTURE.md).
+From the folder containing `package.json`, run `npm.cmd test` on Windows PowerShell or `npm test` on macOS/Linux. Run the matching `build` command above before publishing changes.
 
----
+The automated tests cover known grouping cases at different writing sizes and pen widths, strict arithmetic errors, pixel erasing, coordinate conversion, and selected shape rules. A saved real handwriting case checks that eight `8`/`9` strokes stay in eight groups. In a full browser replay, those symbols were all recognized after tightening the image crop. A subsequent user-drawn `6`/`8` sheet was reported correct. These examples are useful regressions, **not** a general accuracy percentage. Physical touch/stylus behavior and performance across devices still need broader testing.
 
-## 📚 Model Attribution & Architecture
+## Model, privacy, and project notes
 
-* **Source Repository:** [rafiibnsultan/Math_Symbols_Classify](https://github.com/rafiibnsultan/Math_Symbols_Classify)
-* **License:** MIT License
-* **Training Dataset:** [Kaggle Handwritten Math Symbols Dataset (Xai Nano)](https://www.kaggle.com/datasets/xainano/handwrittenmathsymbols) — 100,000+ samples.
-* **Model Architecture:** 11-layer Convolutional Neural Network (6 Conv2D layers + 3 MaxPooling2D layers + Dropout + Dense 128 + Dense 16 Softmax).
-* **Reported Accuracy:** 99.85% test accuracy (1.00 F1 score).
-* **Reference Citation:** Published in IEEE: [ICEEICT 2021 (IEEE Xplore: 9667794)](https://ieeexplore.ieee.org/abstract/document/9667794).
+The recognition model is adapted from the MIT-licensed [Math_Symbols_Classify repository](https://github.com/rafiibnsultan/Math_Symbols_Classify). Its source reports 99.85% accuracy on a prepared dataset; that is **not** CalcInk's measured end-to-end accuracy. The model lists 15 training labels for the digits and arithmetic marks although its output layer has 16 positions; an undocumented output is treated as unknown. Decimal points and a few clear shapes use small contextual rules. The model runs locally in a Web Worker with bundled TensorFlow.js and WebAssembly, falling back to the CPU backend if needed.
 
----
+No account, cloud API, or model download at inference time is required by the built app. Drawing data remains in the browser unless you export and share a sample. See [ARCHITECTURE.md](ARCHITECTURE.md) for the current design and limits, and [PROJECT_JOURNEY.md](PROJECT_JOURNEY.md) for the fuller story of earlier approaches, failed experiments, handwriting tests, and decisions.
 
-## 📁 Repository Structure
+## Publish with GitHub Pages
 
-```
-calcink/
-├── index.html                   # Digital notebook application interface
-├── ARCHITECTURE.md              # Detailed architecture, design decisions & error log
-├── CalcInk_Problem_Statement.pdf # Official competition problem statement
-├── README.md                    # Project overview, setup & model attribution
-├── convert_to_tfjs.py           # Keras HDF5 to TensorFlow.js weight converter
-├── test_grouper.js              # Automated segmentation test suite
-├── test_evaluator.js            # Automated BODMAS math evaluator test suite
-├── package.json                 # Project configuration
-├── public/
-│   └── model/
-│       ├── model.json           # TF.js model layer topology & manifest
-│       └── group1-shard1of1.bin # 8.9 MB Float32 binary weight shard
-└── src/
-    ├── main.js                  # App orchestrator & AI pipeline coordinator
-    ├── style.css                # Digital notebook paper aesthetics
-    ├── canvas/
-    │   ├── CanvasManager.js     # Dual-layer, 60 FPS drawing & overlay renderer
-    │   └── History.js           # Undo / Redo history manager
-    ├── segmentation/
-    │   ├── Grouper.js           # Two-tier hybrid stroke & line clustering engine
-    │   └── Stroke.js            # Vector stroke model & geometric bounds
-    ├── recognition/
-    │   ├── PatchExtractor.js    # 50x50 aspect-ratio preserved patch extractor
-    │   └── Recognizer.js        # TF.js WebGL inference engine
-    └── evaluator/
-        └── Evaluator.js         # Deterministic BODMAS math evaluation engine
-```
+`npm run build` produces a static site in `dist/`. A host must serve **all** of `dist/`, including `sw.js`, `model/`, and `assets/`, over HTTPS. The generated directory is not committed: GitHub Actions builds and publishes it from the source files.
+
+The repository includes a workflow at `.github/workflows/pages.yml`. In the repository's **Settings → Pages**, set **Build and deployment → Source** to **GitHub Actions**. Then run **Actions → Build and deploy CalcInk → Run workflow**, or push a new change to `main`. When the deployment succeeds, open [choco-princess.github.io/calcink/](https://choco-princess.github.io/calcink/). The workflow sets `CALCINK_BASE=/calcink/` for that address; change it if the repository name changes. Check **Ready • Offline saved**, write `1 + 1 =`, and test an offline reload after the first successful visit. The URL will not work until Pages is enabled and the workflow deploys successfully.

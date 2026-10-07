@@ -1,3 +1,5 @@
+import { pixelCrop } from '../canvas/coordinates.js';
+
 /**
  * PatchExtractor: Crops a character bounding box from the drawing canvas,
  * pads it with aspect-ratio preservation to a 50x50 square,
@@ -26,18 +28,18 @@ export class PatchExtractor {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, targetSize, targetSize);
 
-    const pad = 6;
-    const srcX = Math.max(0, (bounds.minX - pad) * dpr);
-    const srcY = Math.max(0, (bounds.minY - pad) * dpr);
-    const srcW = Math.min(sourceCanvas.width - srcX, (bounds.maxX - bounds.minX + pad * 2) * dpr);
-    const srcH = Math.min(sourceCanvas.height - srcY, (bounds.maxY - bounds.minY + pad * 2) * dpr);
+    // Stroke bounds already include the pen radius. Extra crop padding made
+    // digits occupy too little of the model input (notably 6 versus 8).
+    const pad = 0;
+    const crop = pixelCrop(bounds, dpr, pad, sourceCanvas.width, sourceCanvas.height);
+    const srcX = crop.x, srcY = crop.y, srcW = crop.width, srcH = crop.height;
 
     if (srcW <= 0 || srcH <= 0) {
       return new Float32Array(targetSize * targetSize * 3);
     }
 
-    // Preserve aspect ratio by fitting into 40x40 inner area (with 5px padding border)
-    const innerSize = 40;
+    // Keep a narrow white border while preserving the symbol's aspect ratio.
+    const innerSize = 46;
     const scale = Math.min(innerSize / srcW, innerSize / srcH);
     const destW = srcW * scale;
     const destH = srcH * scale;

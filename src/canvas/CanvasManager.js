@@ -1,6 +1,7 @@
 import { Stroke } from '../segmentation/Stroke.js';
 import { HistoryManager } from './History.js';
-import { Grouper } from '../segmentation/Grouper.js';
+import { strokeTouchesCircle, eraseStrokePixels } from './Eraser.js';
+import { backingSize, pointerPosition } from './coordinates.js';
 
 export class CanvasManager {
   constructor(inkCanvas, overlayCanvas, options = {}) {
@@ -17,7 +18,7 @@ export class CanvasManager {
       ...options
     };
 
-    this.currentTool = 'pen'; // 'pen' | 'eraser'
+    this.currentTool = 'pen'; // 'pen' | 'eraser' | 'pixel-eraser'
     this.strokes = [];
     this.activeStroke = null;
     this.isDrawing = false;
@@ -25,22 +26,28 @@ export class CanvasManager {
 
     this.history = new HistoryManager();
     this.debounceTimer = null;
-    this.onClustersUpdated = null; // External callback
+    this.onCanvasChanged = null;
+    this.onStrokesReady = null;
+    this.activePointerId = null;
+    this.eraseHistoryPushed = false;
 
     this.initCanvasSize();
     this.attachEventListeners();
+    this.resizeObserver = new ResizeObserver(() => this.handleResize());
+    this.resizeObserver.observe(this.inkCanvas.parentElement);
     window.addEventListener('resize', () => this.handleResize());
   }
 
   initCanvasSize() {
     const dpr = window.devicePixelRatio || 1;
     const rect = this.inkCanvas.parentElement.getBoundingClientRect();
-    const width = Math.floor(rect.width);
-    const height = Math.floor(rect.height);
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    const backing = backingSize(width, height, dpr);
 
     [this.inkCanvas, this.overlayCanvas].forEach(canvas => {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+      canvas.width = backing.width;
+      canvas.height = backing.height;
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
     });
@@ -59,8 +66,7 @@ export class CanvasManager {
   getPointerPos(e) {
     const rect = this.inkCanvas.getBoundingClientRect();
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      ...pointerPosition(e.clientX, e.clientY, rect),
       pressure: e.pressure || 0.5
     };
   }
@@ -72,14 +78,16 @@ export class CanvasManager {
     canvas.addEventListener('pointermove', (e) => this.onPointerMove(e));
     canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
     canvas.addEventListener('pointercancel', (e) => this.onPointerUp(e));
-    canvas.addEventListener('pointerleave', (e) => {
-      if (this.isDrawing) this.onPointerUp(e);
-    });
   }
 
   onPointerDown(e) {
+    if (this.isDrawing) return;
     e.preventDefault();
+    clearTimeout(this.debounceTimer);
     this.isDrawing = true;
+    this.activePointerId = e.pointerId;
+    this.overlayCanvas.setPointerCapture(e.pointerId);
+    this.onCanvasChanged?.();
     const pos = this.getPointerPos(e);
 
     if (this.currentTool === 'pen') {
@@ -97,14 +105,14 @@ export class CanvasManager {
       this.inkCtx.moveTo(pos.x, pos.y);
       this.inkCtx.lineTo(pos.x + 0.1, pos.y + 0.1);
       this.inkCtx.stroke();
-    } else if (this.currentTool === 'eraser') {
-      this.history.pushState(this.strokes);
+    } else {
+      this.eraseHistoryPushed = false;
       this.eraseAtPoint(pos.x, pos.y);
     }
   }
 
   onPointerMove(e) {
-    if (!this.isDrawing) return;
+    if (!this.isDrawing || e.pointerId !== this.activePointerId) return;
     e.preventDefault();
     const pos = this.getPointerPos(e);
 
@@ -112,34 +120,37 @@ export class CanvasManager {
       const prevPoint = this.activeStroke.points[this.activeStroke.points.length - 1];
       this.activeStroke.addPoint(pos.x, pos.y, pos.pressure);
 
-      // Smooth curve drawing using midpoint quadratic curves
+      // Finish each segment at the newest point so the ink matches the stored stroke.
       this.inkCtx.beginPath();
       this.inkCtx.lineCap = 'round';
       this.inkCtx.lineJoin = 'round';
       this.inkCtx.strokeStyle = this.activeStroke.color;
       this.inkCtx.lineWidth = this.activeStroke.width;
 
-      const midX = (prevPoint.x + pos.x) / 2;
-      const midY = (prevPoint.y + pos.y) / 2;
       this.inkCtx.moveTo(prevPoint.x, prevPoint.y);
-      this.inkCtx.quadraticCurveTo(prevPoint.x, prevPoint.y, midX, midY);
+      this.inkCtx.quadraticCurveTo(prevPoint.x, prevPoint.y, pos.x, pos.y);
       this.inkCtx.stroke();
-    } else if (this.currentTool === 'eraser') {
+    } else {
       this.eraseAtPoint(pos.x, pos.y);
     }
   }
 
   onPointerUp(e) {
-    if (!this.isDrawing) return;
+    if (!this.isDrawing || e.pointerId !== this.activePointerId) return;
     this.isDrawing = false;
+    if (this.overlayCanvas.hasPointerCapture(e.pointerId)) {
+      this.overlayCanvas.releasePointerCapture(e.pointerId);
+    }
+    this.activePointerId = null;
 
     if (this.currentTool === 'pen' && this.activeStroke) {
       if (this.activeStroke.points.length > 0) {
         this.strokes.push(this.activeStroke);
+        this.onCanvasChanged?.();
       }
       this.activeStroke = null;
-      this.scheduleGrouping();
     }
+    this.scheduleGrouping();
   }
 
   /**
@@ -147,24 +158,28 @@ export class CanvasManager {
    */
   eraseAtPoint(x, y, radius = 12) {
     let modified = false;
-    const remainingStrokes = this.strokes.filter(stroke => {
+    const remainingStrokes = [];
+    for (const stroke of this.strokes) {
       const b = stroke.bounds;
-      if (x < b.minX - radius || x > b.maxX + radius || y < b.minY - radius || y > b.maxY + radius) {
-        return true;
+      if (x < b.minX - radius || x > b.maxX + radius || y < b.minY - radius || y > b.maxY + radius ||
+          !strokeTouchesCircle(stroke, x, y, radius)) {
+        remainingStrokes.push(stroke);
+        continue;
       }
-      const hit = stroke.points.some(p => {
-        const dx = p.x - x;
-        const dy = p.y - y;
-        return (dx * dx + dy * dy) <= (radius * radius);
-      });
-      if (hit) modified = true;
-      return !hit;
-    });
+      modified = true;
+      if (this.currentTool === 'pixel-eraser') {
+        remainingStrokes.push(...eraseStrokePixels(stroke, x, y, radius).fragments);
+      }
+    }
 
     if (modified) {
+      if (!this.eraseHistoryPushed) {
+        this.history.pushState(this.strokes);
+        this.eraseHistoryPushed = true;
+      }
       this.strokes = remainingStrokes;
       this.redrawAllStrokes();
-      this.scheduleGrouping();
+      this.onCanvasChanged?.();
     }
   }
 
@@ -182,6 +197,7 @@ export class CanvasManager {
 
       if (stroke.points.length === 1) {
         const p = stroke.points[0];
+        this.inkCtx.fillStyle = stroke.color;
         this.inkCtx.arc(p.x, p.y, stroke.width / 2, 0, Math.PI * 2);
         this.inkCtx.fill();
         continue;
@@ -191,9 +207,7 @@ export class CanvasManager {
       for (let i = 1; i < stroke.points.length; i++) {
         const p1 = stroke.points[i - 1];
         const p2 = stroke.points[i];
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
-        this.inkCtx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+        this.inkCtx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
       }
       this.inkCtx.stroke();
     }
@@ -207,11 +221,7 @@ export class CanvasManager {
   }
 
   updateClusters() {
-    this.blocks = Grouper.groupStrokesIntoLines(this.strokes);
-    this.drawOverlay();
-    if (this.onClustersUpdated) {
-      this.onClustersUpdated(this.blocks);
-    }
+    this.onStrokesReady?.(this.strokes);
   }
 
   drawOverlay() {
@@ -248,7 +258,8 @@ export class CanvasManager {
 
           // Badge label: show predicted symbol if available, else #index
           const badgeText = cluster.predictedSymbol
-            ? `'${cluster.predictedSymbol}' (${Math.round((cluster.confidence || 0) * 100)}%)`
+            ? (cluster.confidence == null ? `'${cluster.predictedSymbol}'` :
+              `'${cluster.predictedSymbol}' (${Math.round(cluster.confidence * 100)}%)`)
             : `#${charIdx + 1}`;
 
           this.overlayCtx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -296,6 +307,7 @@ export class CanvasManager {
   undo() {
     if (this.history.canUndo()) {
       this.strokes = this.history.undo(this.strokes);
+      this.onCanvasChanged?.();
       this.redrawAllStrokes();
       this.scheduleGrouping();
     }
@@ -304,6 +316,7 @@ export class CanvasManager {
   redo() {
     if (this.history.canRedo()) {
       this.strokes = this.history.redo(this.strokes);
+      this.onCanvasChanged?.();
       this.redrawAllStrokes();
       this.scheduleGrouping();
     }
@@ -314,6 +327,7 @@ export class CanvasManager {
     this.history.pushState(this.strokes);
     this.strokes = [];
     this.blocks = [];
+    this.onCanvasChanged?.();
     this.redrawAllStrokes();
     this.scheduleGrouping();
   }

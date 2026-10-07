@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CalcInk: On-Device Handwritten Math Calculator</title>
   <link rel="stylesheet" href="./src/style.css">
-  <!-- TensorFlow.js WebGL client-side runtime -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 </head>
 <body>
   <!-- Header & Toolbar -->
@@ -24,6 +22,9 @@
         </button>
         <button id="btn-eraser" class="btn" title="Stroke Eraser">
           🧹 <span>Eraser</span>
+        </button>
+        <button id="btn-pixel-eraser" class="btn" title="Pixel Eraser">
+          ◌ <span>Pixel Eraser</span>
         </button>
       </div>
 
@@ -58,6 +59,9 @@
         <button id="btn-toggle-boxes" class="btn active" title="Toggle AI Character Bounding Boxes">
           📦 <span>Bounding Boxes: ON</span>
         </button>
+        <button id="btn-save-sample" class="btn" title="Export this drawing and its predictions locally">
+          💾 <span>Save Sample</span>
+        </button>
       </div>
     </div>
   </header>
@@ -87,9 +91,20 @@
 
     <div class="status-badge">
       <span class="status-dot"></span>
-      <span>100% Client-Side • 60 FPS Digital Ink Engine</span>
+      <span>On-device • <span id="app-status">Loading recognition…</span><span id="offline-status"></span></span>
     </div>
   </footer>
+
+  <dialog id="sample-dialog" aria-label="Saved drawing sample">
+    <h2>Drawing sample</h2>
+    <p>Download the JSON file, or copy the text below to share this drawing.</p>
+    <textarea id="sample-json" readonly aria-label="Drawing sample JSON"></textarea>
+    <div class="sample-actions">
+      <a id="sample-download" class="btn" download>Download JSON</a>
+      <button id="sample-copy" class="btn" type="button">Copy JSON</button>
+      <button id="sample-close" class="btn" type="button">Close</button>
+    </div>
+  </dialog>
 
   <script type="module" src="./src/main.js"></script>
 </body>

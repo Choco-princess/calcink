@@ -22,6 +22,7 @@ body {
   background-color: #f1f5f9;
   color: var(--text);
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -66,6 +67,7 @@ header {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .tool-group {
@@ -91,6 +93,9 @@ header {
   color: var(--text);
   cursor: pointer;
   transition: all 0.15s ease;
+  min-height: 40px;
+  white-space: nowrap;
+  text-decoration: none;
 }
 
 .btn:hover {
@@ -115,9 +120,36 @@ header {
   margin: 0 4px;
 }
 
+#sample-dialog {
+  width: min(92vw, 640px);
+  max-height: 85vh;
+  margin: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+#sample-dialog::backdrop { background: rgb(15 23 42 / 0.55); }
+#sample-dialog h2 { margin-bottom: 8px; }
+#sample-dialog p { margin-bottom: 12px; color: var(--text-muted); }
+#sample-json {
+  width: 100%;
+  height: min(45vh, 320px);
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+  user-select: text;
+}
+.sample-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.sample-actions .btn { background: #f1f5f9; }
+
 /* Canvas Container with Digital Notebook Paper Aesthetic */
 .canvas-wrapper {
   flex: 1;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   background-color: var(--bg-paper);
@@ -162,6 +194,7 @@ footer {
 .stats-group {
   display: flex;
   gap: 16px;
+  min-width: 0;
 }
 
 .stat-item {
@@ -186,4 +219,30 @@ footer {
   height: 8px;
   border-radius: 50%;
   background: #10b981;
+}
+
+@media (max-width: 760px) {
+  header {
+    display: block;
+    padding: 8px 10px;
+  }
+  .logo-area { margin-bottom: 6px; }
+  .logo-badge { display: none; }
+  .toolbar {
+    overflow-x: auto;
+    padding-bottom: 3px;
+    scrollbar-width: thin;
+  }
+  .tool-group { flex: 0 0 auto; }
+  .divider { flex: 0 0 1px; }
+  footer {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .stats-group {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .stat-item { flex: 0 0 auto; }
+  .status-badge { flex: 0 0 auto; }
 }

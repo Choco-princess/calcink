@@ -1,3 +1,5 @@
+import * as tf from '@tensorflow/tfjs';
+
 /**
  * Recognition Engine: Manages TensorFlow.js model loading and inference.
  */
@@ -5,10 +7,12 @@ export class Recognizer {
   constructor() {
     this.model = null;
     this.isLoaded = false;
-    // Dataset III exact label order (15 classes + 1 dummy)
+    // The training notebook assigns these 15 labels to indices 0..14. The
+    // architecture has 16 outputs, but its last output has no listed class.
+    // Decimal points are handled by contextual geometry after grouping.
     this.labels = [
       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-      'add', 'div', 'eq', 'mul', 'sub', 'dec'
+      'add', 'div', 'eq', 'mul', 'sub'
     ];
     this.labelToSymbol = {
       '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
@@ -17,12 +21,11 @@ export class Recognizer {
       'div': '÷',
       'eq': '=',
       'mul': '×',
-      'sub': '-',
-      'dec': '.'
+      'sub': '-'
     };
   }
 
-  async loadModel(modelPath = './public/model/model.json') {
+  async loadModel(modelPath = '/model/model.json') {
     if (this.isLoaded) return true;
     try {
       console.log('Loading TF.js model from:', modelPath);
@@ -60,18 +63,11 @@ export class Recognizer {
       const results = [];
       for (let i = 0; i < batchSize; i++) {
         const probs = probabilities[i];
-        let maxIdx = 0;
-        let maxVal = probs[0];
-        for (let j = 1; j < probs.length; j++) {
-          if (probs[j] > maxVal) {
-            maxVal = probs[j];
-            maxIdx = j;
-          }
-        }
-
-        const label = this.labels[maxIdx];
-        const symbol = this.labelToSymbol[label] || label;
-        results.push({ symbol, confidence: maxVal });
+        if (probs.length !== 16) throw new Error(`Unexpected model output count: ${probs.length}`);
+        const candidates = probs.map((confidence, index) => ({
+          symbol: this.labelToSymbol[this.labels[index]] || '?', confidence
+        })).sort((a, b) => b.confidence - a.confidence).slice(0, 3);
+        results.push({ ...candidates[0], candidates });
       }
 
       return results;

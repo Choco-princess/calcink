@@ -1,6 +1,188 @@
-/**
- * CharacterCluster: represents one recognized math symbol.
- */
+// All coordinates and distances in this module are CSS pixels.
+const median = values => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+};
+const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+const gap = (a0, a1, b0, b1) => Math.max(0, a0 - b1, b0 - a1);
+
+function boundsOf(strokes) {
+  return strokes.reduce((b, stroke) => {
+    const s = stroke.bounds;
+    b.minX = Math.min(b.minX, s.minX);
+    b.minY = Math.min(b.minY, s.minY);
+    b.maxX = Math.max(b.maxX, s.maxX);
+    b.maxY = Math.max(b.maxY, s.maxY);
+    return b;
+  }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+}
+
+const width = b => b.maxX - b.minX;
+const height = b => b.maxY - b.minY;
+const centerX = b => (b.minX + b.maxX) / 2;
+const centerY = b => (b.minY + b.maxY) / 2;
+
+function segmentDistance(a, b, c, d) {
+  const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const ab1 = cross(a, b, c), ab2 = cross(a, b, d);
+  const cd1 = cross(c, d, a), cd2 = cross(c, d, b);
+  if (ab1 * ab2 <= 0 && cd1 * cd2 <= 0) return 0;
+  const pointToSegment = (p, q, r) => {
+    const dx = r.x - q.x, dy = r.y - q.y;
+    const t = Math.max(0, Math.min(1, ((p.x - q.x) * dx + (p.y - q.y) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(p.x - q.x - t * dx, p.y - q.y - t * dy);
+  };
+  return Math.min(pointToSegment(a, c, d), pointToSegment(b, c, d),
+    pointToSegment(c, a, b), pointToSegment(d, a, b));
+}
+
+function pathDistance(a, b) {
+  let best = Infinity;
+  const ap = a.points, bp = b.points;
+  for (let i = 0; i < Math.max(1, ap.length - 1); i++) {
+    for (let j = 0; j < Math.max(1, bp.length - 1); j++) {
+      best = Math.min(best, segmentDistance(ap[i], ap[i + 1] || ap[i],
+        bp[j], bp[j + 1] || bp[j]));
+      if (best === 0) return 0;
+    }
+  }
+  return best;
+}
+
+function hasRightwardLowerArm(stroke) {
+  const b = stroke.bounds;
+  if (stroke.points.length < 3 || width(b) < height(b) * 0.25) return false;
+  return stroke.points.some((p, i) => i > 0 &&
+    p.x > b.minX + width(b) * 0.75 &&
+    p.y > b.minY + height(b) * 0.4 &&
+    stroke.points[i - 1].x < p.x - width(b) * 0.35 &&
+    Math.abs(stroke.points[i - 1].y - p.y) < height(b) * 0.15);
+}
+
+function writingScale(strokes) {
+  const bodies = strokes.filter(s => s.heightPx >= Math.max(12, s.width * 2.5) &&
+    s.heightPx >= s.widthPx * 0.45).map(s => s.heightPx);
+  if (bodies.length) {
+    bodies.sort((a, b) => a - b);
+    return Math.max(20, median(bodies.slice(Math.floor(bodies.length / 3))));
+  }
+  const broadMarks = strokes.map(s => Math.max(s.heightPx, s.widthPx));
+  broadMarks.sort((a, b) => a - b);
+  return Math.max(24, broadMarks[Math.floor(broadMarks.length * 0.75)]);
+}
+
+function joinScore(a, b, scale) {
+  const ba = boundsOf(a), bb = boundsOf(b), combined = boundsOf([...a, ...b]);
+  if (width(combined) > scale * 1.65 || height(combined) > scale * 2.15) return 0;
+  const xGap = gap(ba.minX, ba.maxX, bb.minX, bb.maxX);
+  const yGap = gap(ba.minY, ba.maxY, bb.minY, bb.maxY);
+  const xOverlap = overlap(ba.minX, ba.maxX, bb.minX, bb.maxX);
+  const yOverlap = overlap(ba.minY, ba.maxY, bb.minY, bb.maxY);
+  const xRatio = xOverlap / Math.max(1, Math.min(width(ba), width(bb)));
+  const barStroke = group => group.find(s => s.heightPx <= Math.max(9, scale * 0.25) && s.widthPx >= scale * 0.3);
+  const barA = barStroke(a), barB = barStroke(b);
+  const dotA = a.every(s => Math.max(s.widthPx, s.heightPx) <= Math.max(10, scale * 0.24));
+  const dotB = b.every(s => Math.max(s.widthPx, s.heightPx) <= Math.max(10, scale * 0.24));
+
+  // A decimal mark remains separate; a dot joins a bar only when centered on it.
+  if ((dotA && barB) || (dotB && barA)) {
+    const dot = dotA ? ba : bb, bar = (dotA ? barB : barA).bounds;
+    return Math.abs(centerX(dot) - centerX(bar)) <= width(bar) * 0.35 &&
+      yGap <= scale * 0.8 && height(combined) <= scale * 1.7 ? 80 : 0;
+  }
+  if (dotA || dotB) return 0;
+
+  // The two bars of '=' have similar width and almost the same horizontal span.
+  if (barA && barB && xRatio >= 0.6 &&
+      Math.max(width(ba), width(bb)) / Math.max(1, Math.min(width(ba), width(bb))) < 1.7 &&
+      yGap <= scale * 0.65 && height(combined) <= scale * 1.1) return 75;
+
+  // Real ink contact is stronger evidence than overlapping bounding rectangles.
+  if (xOverlap > 0 && yOverlap > 0) {
+    const near = a.some(sa => b.some(sb =>
+      pathDistance(sa, sb) <= (sa.width + sb.width) / 2 + Math.max(2, scale * 0.025)));
+    if (near) return 100;
+  }
+
+  // Pen lifts, top/bottom digit pieces, and stems with caps or bases.
+  if (xRatio >= 0.28 && yGap <= scale * 0.18 &&
+      height(combined) <= scale * 2.05) {
+    const endpoint = a.some(sa => b.some(sb => sa.endpointDistance(sb) <= scale * 0.22));
+    if (endpoint) return 60;
+    if (xRatio >= 0.55 && yOverlap === 0) return 45;
+  }
+
+  // A disconnected open '4' can have a lower arm ending just before its stem.
+  if (xGap <= scale * 0.13 && yOverlap >= scale * 0.25) {
+    const arm = [...a, ...b].some(hasRightwardLowerArm);
+    const stem = [...a, ...b].some(s => s.heightPx >= scale * 0.7 &&
+      s.heightPx > s.widthPx * 2);
+    if (arm && stem && width(combined) <= scale * 1.2) return 35;
+  }
+  return 0;
+}
+
+function formSymbols(strokes, scale) {
+  const groups = strokes.map(s => [s]);
+  while (true) {
+    let best = { score: 0 };
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const score = joinScore(groups[i], groups[j], scale);
+        if (score > best.score) best = { i, j, score };
+      }
+    }
+    if (!best.score) break;
+    const joined = [...groups[best.i], ...groups[best.j]];
+    joined.weakJoin = groups[best.i].weakJoin || groups[best.j].weakJoin || best.score < 70;
+    groups[best.i] = joined;
+    groups.splice(best.j, 1);
+  }
+  return groups;
+}
+
+function rowModel(row) {
+  const anchors = row.filter(g => {
+    const b = boundsOf(g);
+    return height(b) >= row.scale * 0.55 && height(b) >= width(b) * 0.4;
+  });
+  const points = (anchors.length ? anchors : row).map(g => boundsOf(g));
+  const xs = points.map(centerX), ys = points.map(centerY);
+  const x0 = xs.reduce((a, x) => a + x, 0) / xs.length;
+  const y0 = ys.reduce((a, y) => a + y, 0) / ys.length;
+  const cov = xs.reduce((a, x, i) => a + (x - x0) * (ys[i] - y0), 0);
+  const variance = xs.reduce((a, x) => a + (x - x0) ** 2, 0);
+  const slope = Math.max(-0.12, Math.min(0.12, variance ? cov / variance : 0));
+  return { x0, y0, slope };
+}
+
+function assignRows(groups, scale) {
+  const anchors = groups.filter(g => {
+    const b = boundsOf(g);
+    return height(b) >= scale * 0.55 && height(b) >= width(b) * 0.4;
+  }).sort((a, b) => centerY(boundsOf(a)) - centerY(boundsOf(b)));
+  const others = groups.filter(g => !anchors.includes(g));
+  const rows = [];
+  for (const group of [...anchors, ...others]) {
+    const b = boundsOf(group);
+    let bestRow = null, bestDistance = Infinity;
+    for (const row of rows) {
+      const model = rowModel(row);
+      const distance = Math.abs(centerY(b) - model.y0 - model.slope * (centerX(b) - model.x0));
+      if (distance < bestDistance) { bestDistance = distance; bestRow = row; }
+    }
+    const tolerance = scale * (anchors.includes(group) ? 0.72 : 0.85);
+    if (bestRow && bestDistance <= tolerance) bestRow.push(group);
+    else {
+      const row = [group];
+      row.scale = scale;
+      rows.push(row);
+    }
+  }
+  rows.sort((a, b) => rowModel(a).y0 - rowModel(b).y0);
+  return rows;
+}
+
 export class CharacterCluster {
   constructor(id, lineIndex = 0, blockIndex = 1) {
     this.id = id;
@@ -9,37 +191,16 @@ export class CharacterCluster {
     this.strokes = [];
     this.bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }
-
   addStroke(stroke) {
     this.strokes.push(stroke);
-    const b = stroke.bounds;
-    this.bounds.minX = Math.min(this.bounds.minX, b.minX);
-    this.bounds.minY = Math.min(this.bounds.minY, b.minY);
-    this.bounds.maxX = Math.max(this.bounds.maxX, b.maxX);
-    this.bounds.maxY = Math.max(this.bounds.maxY, b.maxY);
+    this.bounds = boundsOf(this.strokes);
   }
-
-  get widthPx() {
-    return Math.max(1, this.bounds.maxX - this.bounds.minX);
-  }
-
-  get heightPx() {
-    return Math.max(1, this.bounds.maxY - this.bounds.minY);
-  }
-
-  get centerX() {
-    return (this.bounds.minX + this.bounds.maxX) / 2;
-  }
-
-  get centerY() {
-    return (this.bounds.minY + this.bounds.maxY) / 2;
-  }
+  get widthPx() { return Math.max(1, width(this.bounds)); }
+  get heightPx() { return Math.max(1, height(this.bounds)); }
+  get centerX() { return centerX(this.bounds); }
+  get centerY() { return centerY(this.bounds); }
 }
 
-/**
- * EquationBlock: represents an independent equation / scratchpad on the canvas.
- * Handles both multiple horizontal lines and side-by-side equations.
- */
 export class EquationBlock {
   constructor(id, lineIndex = 1, blockIndex = 1) {
     this.id = id;
@@ -49,343 +210,50 @@ export class EquationBlock {
     this.clusters = [];
     this.bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }
-
   addStroke(stroke) {
     this.strokes.push(stroke);
-    const b = stroke.bounds;
-    this.bounds.minX = Math.min(this.bounds.minX, b.minX);
-    this.bounds.minY = Math.min(this.bounds.minY, b.minY);
-    this.bounds.maxX = Math.max(this.bounds.maxX, b.maxX);
-    this.bounds.maxY = Math.max(this.bounds.maxY, b.maxY);
+    this.bounds = boundsOf(this.strokes);
   }
-
-  get medianHeight() {
-    if (this.strokes.length === 0) return 36;
-    const heights = this.strokes.map(s => s.heightPx).sort((a, b) => a - b);
-    return Math.max(20, heights[Math.floor(heights.length / 2)] || 36);
-  }
-
-  get medianWidth() {
-    if (this.strokes.length === 0) return 24;
-    const widths = this.strokes.map(s => s.widthPx).sort((a, b) => a - b);
-    return Math.max(16, widths[Math.floor(widths.length / 2)] || 24);
+  addCluster(cluster) {
+    this.clusters.push(cluster);
+    for (const stroke of cluster.strokes) this.addStroke(stroke);
   }
 }
 
-/**
- * Production-Grade Hybrid Segregation Engine:
- * 1. 2D Spatial & Y-Valley Line Slicing (isolates rows and side-by-side equations).
- * 2. Anisotropic Directional Dilation (bridges = bars and ÷ dots without horizontal bleeding).
- * 3. Strict 16-Symbol Domain Morphological Validation.
- */
 export class Grouper {
-  static GRID_SIZE = 28; // reference grid square size in pixels
+  static estimateScale(strokes) { return writingScale(strokes); }
 
-  /**
-   * Determine if two strokes belong to the SAME horizontal equation line.
-   */
-  static shouldBeInSameLineBand(strokeA, strokeB, globalMedianH = 36) {
-    const bA = strokeA.bounds;
-    const bB = strokeB.bounds;
-
-    const yOverlap = Math.max(0, Math.min(bA.maxY, bB.maxY) - Math.max(bA.minY, bB.minY));
-    const verticalGap = Math.max(0, Math.max(bA.minY - bB.maxY, bB.minY - bA.maxY));
-
-    const hA = strokeA.heightPx;
-    const hB = strokeB.heightPx;
-    const wA = strokeA.widthPx;
-    const wB = strokeB.widthPx;
-
-    const isATall = hA > Math.max(24, globalMedianH * 0.6) && hA > wA * 0.8;
-    const isBTall = hB > Math.max(24, globalMedianH * 0.6) && hB > wB * 0.8;
-
-    // GOLDEN RULE 1: Two tall vertical characters stacked on top of each other
-    // are ALWAYS in separate equation lines (e.g. top '1' vs bottom '1').
-    if (isATall && isBTall && yOverlap === 0) {
-      return false;
-    }
-
-    // Direct vertical overlap between strokes
-    if (yOverlap > 0) {
-      const minH = Math.min(hA, hB);
-      // If overlap is more than 20% of the shorter stroke, they share the line
-      if ((yOverlap / minH) > 0.2) {
-        return true;
-      }
-    }
-
-    // Parallel bars for '=' or '÷': horizontal strokes stacked vertically
-    const isAHoriz = wA > hA * 0.8;
-    const isBHoriz = wB > hB * 0.8;
-    const isDot = (wA <= 18 && hA <= 18) || (wB <= 18 && hB <= 18);
-    const xOverlap = Math.max(0, Math.min(bA.maxX, bB.maxX) - Math.max(bA.minX, bB.minX));
-
-    if ((isAHoriz && isBHoriz) || isDot) {
-      const minW = Math.min(wA, wB);
-      if (minW > 0 && (xOverlap / minW) > 0.3 && verticalGap < Math.max(45, globalMedianH * 1.3)) {
-        return true;
-      }
-    }
-
-    // Adjacent characters on the same baseline: small vertical gap
-    const avgH = (hA + hB) / 2;
-    if (verticalGap < Math.max(16, avgH * 0.45)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Step 1: Partition strokes into distinct 2D Equation Blocks.
-   * Handles both vertical line stacking and horizontal side-by-side equations.
-   */
-  static segmentEquationBlocks(strokes) {
-    if (!strokes || strokes.length === 0) return [];
-
-    // Calculate global median stroke height
-    const allHeights = strokes.map(s => s.heightPx).sort((a, b) => a - b);
-    const globalMedianH = Math.max(20, allHeights[Math.floor(allHeights.length / 2)] || 36);
-
-    const n = strokes.length;
-    const lineParent = Array.from({ length: n }, (_, i) => i);
-
-    function find(i, parent) {
-      if (parent[i] === i) return i;
-      parent[i] = find(parent[i], parent);
-      return parent[i];
-    }
-
-    function union(i, j, parent) {
-      const rootI = find(i, parent);
-      const rootJ = find(j, parent);
-      if (rootI !== rootJ) parent[rootI] = rootJ;
-    }
-
-    // 1. Group into horizontal line bands
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        if (Grouper.shouldBeInSameLineBand(strokes[i], strokes[j], globalMedianH)) {
-          union(i, j, lineParent);
-        }
-      }
-    }
-
-    const lineMap = new Map();
-    for (let i = 0; i < n; i++) {
-      const root = find(i, lineParent);
-      if (!lineMap.has(root)) {
-        lineMap.set(root, []);
-      }
-      lineMap.get(root).push(strokes[i]);
-    }
-
-    // Sort lines top to bottom by vertical position
-    const rawLines = Array.from(lineMap.values());
-    rawLines.sort((lineA, lineB) => {
-      const minYA = Math.min(...lineA.map(s => s.bounds.minY));
-      const minYB = Math.min(...lineB.map(s => s.bounds.minY));
-      return minYA - minYB;
-    });
-
-    // 2. Within each horizontal line, detect side-by-side equations (horizontal gap splitting)
-    const equationBlocks = [];
-    let lineCounter = 1;
-
-    for (const lineStrokes of rawLines) {
-      // Sort strokes left to right
-      lineStrokes.sort((a, b) => a.bounds.minX - b.bounds.minX);
-
-      // Cluster strokes into continuous horizontal blocks
-      // A gap larger than ~2.8x character height/grid unit marks a separate equation scratchpad!
-      const blockSplitThreshold = Math.max(75, globalMedianH * 2.2);
-
-      let currentBlock = new EquationBlock(`Eq-${lineCounter}-1`, lineCounter, 1);
-      currentBlock.addStroke(lineStrokes[0]);
-
-      for (let i = 1; i < lineStrokes.length; i++) {
-        const stroke = lineStrokes[i];
-        // Horizontal distance from current block's right edge
-        const horizontalGap = stroke.bounds.minX - currentBlock.bounds.maxX;
-
-        if (horizontalGap > blockSplitThreshold) {
-          // Large blank space -> Start a new side-by-side equation block!
-          equationBlocks.push(currentBlock);
-          currentBlock = new EquationBlock(
-            `Eq-${lineCounter}-${currentBlock.blockIndex + 1}`,
-            lineCounter,
-            currentBlock.blockIndex + 1
-          );
-        }
-        currentBlock.addStroke(stroke);
-      }
-
-      equationBlocks.push(currentBlock);
-      lineCounter++;
-    }
-
-    // Re-index all blocks cleanly (Eq 1, Eq 2, Eq 3...) sorted top-to-bottom, left-to-right
-    equationBlocks.sort((a, b) => {
-      if (Math.abs(a.bounds.minY - b.bounds.minY) > 30) {
-        return a.bounds.minY - b.bounds.minY;
-      }
-      return a.bounds.minX - b.bounds.minX;
-    });
-
-    equationBlocks.forEach((block, idx) => {
-      block.id = `Eq ${idx + 1}`;
-      block.displayIndex = idx + 1;
-    });
-
-    return equationBlocks;
-  }
-
-  /**
-   * Step 2: Anisotropic Directional Morphological Clustering (Within an Equation Block).
-   * Bridges vertical stacks (=, ÷, broken strokes) with zero horizontal bleed.
-   */
-  static shouldGroupInBlock(strokeA, strokeB, medianH = 36) {
-    const bA = strokeA.bounds;
-    const bB = strokeB.bounds;
-
-    const wA = strokeA.widthPx;
-    const hA = strokeA.heightPx;
-    const wB = strokeB.widthPx;
-    const hB = strokeB.heightPx;
-
-    // Rule 1: Broken Stroke / Pen-lift healing
-    const endpointDist = strokeA.endpointDistance(strokeB);
-    if (endpointDist < Math.max(14, medianH * 0.25)) {
-      return true;
-    }
-
-    // Rule 2: Strict Zero Horizontal Dilation Guard
-    // If Stroke B is purely to the right of Stroke A (no horizontal overlap),
-    // they can NEVER be the same character in our 16 symbols.
-    const xOverlap = Math.max(0, Math.min(bA.maxX, bB.maxX) - Math.max(bA.minX, bB.minX));
-    const yOverlap = Math.max(0, Math.min(bA.maxY, bB.maxY) - Math.max(bA.minY, bB.minY));
-
-    if (xOverlap === 0) {
-      return false; // Absolute barrier between adjacent characters (kills domino effect)
-    }
-
-    const minW = Math.min(wA, wB);
-    const minH = Math.min(hA, hB);
-    const xOverlapRatio = minW > 0 ? (xOverlap / minW) : 0;
-    const yOverlapRatio = minH > 0 ? (yOverlap / minH) : 0;
-
-    // Rule 3: Physical Crossing / 2D Intersection (e.g. '+', 'x', '4', crossed '7')
-    if (xOverlap > 0 && yOverlap > 0) {
-      if (xOverlapRatio > 0.15 && yOverlapRatio > 0.15) {
-        return true;
-      }
-    }
-
-    // Rule 4: Directional Vertical Morphological Bridging (Within same X-column)
-    const verticalGap = Math.max(0, Math.max(bA.minY - bB.maxY, bB.minY - bA.maxY));
-    const centerDistX = Math.abs(strokeA.centerX - strokeB.centerX);
-    const maxW = Math.max(wA, wB);
-
-    // A. Equals sign '=': Two parallel horizontal bars
-    const isAHoriz = wA > hA * 0.8;
-    const isBHoriz = wB > hB * 0.8;
-    if (isAHoriz && isBHoriz) {
-      if (xOverlapRatio > 0.35 && verticalGap < Math.max(45, medianH * 1.3)) {
-        return true;
-      }
-    }
-
-    // B. Division sign '÷': Horizontal bar + top/bottom dots
-    const isADot = (wA <= 18 && hA <= 18);
-    const isBDot = (wB <= 18 && hB <= 18);
-    if ((isADot && isBHoriz) || (isBDot && isAHoriz)) {
-      if (centerDistX < maxW * 0.6 && verticalGap < Math.max(45, medianH * 1.3)) {
-        return true;
-      }
-    }
-
-    // C. Digit '1' with bottom base bar '_' or top hook
-    const isAVert = hA > wA * 1.1;
-    const isBVert = hB > wB * 1.1;
-    if ((isAVert && isBHoriz) || (isBVert && isAHoriz)) {
-      const stem = isAVert ? strokeA : strokeB;
-      const bar = isAVert ? strokeB : strokeA;
-      const barBelow = bar.bounds.minY >= stem.bounds.maxY - 14;
-      const barAbove = bar.bounds.maxY <= stem.bounds.minY + 14;
-      if ((barBelow || barAbove) && Math.abs(stem.centerX - bar.centerX) < bar.widthPx * 0.6) {
-        return true;
-      }
-    }
-
-    // D. Multi-stroke '5' (body + top hat) or European '7' (horizontal cross)
-    if (xOverlapRatio > 0.45 && verticalGap < Math.max(20, medianH * 0.4)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Main entry point: Segments canvas into Equation Blocks,
-   * then clusters into sorted Left-to-Right Character Clusters.
-   */
   static groupStrokesIntoLines(strokes) {
-    if (!strokes || strokes.length === 0) return [];
-
-    const blocks = Grouper.segmentEquationBlocks(strokes);
-
-    for (const block of blocks) {
-      const n = block.strokes.length;
-      const parent = Array.from({ length: n }, (_, i) => i);
-      const medianH = block.medianHeight;
-
-      function find(i) {
-        if (parent[i] === i) return i;
-        parent[i] = find(parent[i]);
-        return parent[i];
-      }
-
-      function union(i, j) {
-        const rootI = find(i);
-        const rootJ = find(j);
-        if (rootI !== rootJ) parent[rootI] = rootJ;
-      }
-
-      for (let i = 0; i < n; i++) {
-        for (let j = i + 1; j < n; j++) {
-          if (Grouper.shouldGroupInBlock(block.strokes[i], block.strokes[j], medianH)) {
-            union(i, j);
-          }
+    if (!strokes?.length) return [];
+    const scale = writingScale(strokes);
+    const symbols = formSymbols(strokes, scale);
+    const rows = assignRows(symbols, scale);
+    const blocks = [];
+    rows.forEach((row, lineIndex) => {
+      row.sort((a, b) => boundsOf(a).minX - boundsOf(b).minX);
+      let block = new EquationBlock('', lineIndex + 1, 1);
+      for (const group of row) {
+        const bounds = boundsOf(group);
+        if (block.clusters.length && bounds.minX - block.bounds.maxX > scale * 2.25) {
+          blocks.push(block);
+          block = new EquationBlock('', lineIndex + 1, block.blockIndex + 1);
         }
+        const cluster = new CharacterCluster('', lineIndex + 1, block.blockIndex);
+        for (const stroke of group) cluster.addStroke(stroke);
+        cluster.weakJoin = !!group.weakJoin;
+        block.addCluster(cluster);
       }
-
-      const clusterMap = new Map();
-      for (let i = 0; i < n; i++) {
-        const root = find(i);
-        if (!clusterMap.has(root)) {
-          clusterMap.set(root, new CharacterCluster(`${block.id}-C${clusterMap.size + 1}`, block.displayIndex));
-        }
-        clusterMap.get(root).addStroke(block.strokes[i]);
-      }
-
-      // Sort characters strictly Left-to-Right within this equation
-      const clusters = Array.from(clusterMap.values());
-      clusters.sort((a, b) => a.bounds.minX - b.bounds.minX);
-      block.clusters = clusters;
-    }
-
+      if (block.clusters.length) blocks.push(block);
+    });
+    blocks.forEach((block, i) => {
+      block.id = `Eq ${i + 1}`;
+      block.displayIndex = i + 1;
+      block.clusters.forEach((c, j) => { c.id = `${block.id}-C${j + 1}`; });
+    });
     return blocks;
   }
 
-  /**
-   * Backward-compatible helper returning a flattened array of all clusters.
-   */
   static groupStrokes(strokes) {
-    const blocks = Grouper.groupStrokesIntoLines(strokes);
-    const allClusters = [];
-    for (const block of blocks) {
-      allClusters.push(...block.clusters);
-    }
-    return allClusters;
+    return this.groupStrokesIntoLines(strokes).flatMap(block => block.clusters);
   }
 }

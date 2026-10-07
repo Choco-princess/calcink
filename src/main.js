@@ -1,175 +1,322 @@
 import { CanvasManager } from './canvas/CanvasManager.js';
 import { PatchExtractor } from './recognition/PatchExtractor.js';
-import { Recognizer } from './recognition/Recognizer.js';
 import { Evaluator } from './evaluator/Evaluator.js';
 
-window.addEventListener('DOMContentLoaded', async () => {
+function splitAtEquals(rows) {
+  const blocks = [];
+  for (const row of rows) {
+    let current = [];
+    for (const cluster of row.clusters) {
+      current.push(cluster);
+      if (cluster.predictedSymbol === '=') {
+        blocks.push({ ...row, clusters: current });
+        current = [];
+      }
+    }
+    if (current.length) blocks.push({ ...row, clusters: current });
+  }
+  blocks.forEach((block, index) => {
+    block.id = `Eq ${index + 1}`;
+    block.displayIndex = index + 1;
+    block.bounds = block.clusters.reduce((b, c) => ({
+      minX: Math.min(b.minX, c.bounds.minX),
+      minY: Math.min(b.minY, c.bounds.minY),
+      maxX: Math.max(b.maxX, c.bounds.maxX),
+      maxY: Math.max(b.maxY, c.bounds.maxY)
+    }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+    block.evaluatedResult = Evaluator.evaluate(block.clusters.map(c => c.predictedSymbol));
+  });
+  return blocks;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
   const inkCanvas = document.getElementById('ink-canvas');
   const overlayCanvas = document.getElementById('overlay-canvas');
-
-  // UI Buttons
-  const btnPen = document.getElementById('btn-pen');
-  const btnEraser = document.getElementById('btn-eraser');
-  const widthButtons = [
-    document.getElementById('btn-width-thin'),
-    document.getElementById('btn-width-med'),
-    document.getElementById('btn-width-thick')
-  ];
-  const btnUndo = document.getElementById('btn-undo');
-  const btnRedo = document.getElementById('btn-redo');
-  const btnClear = document.getElementById('btn-clear');
-  const btnToggleBoxes = document.getElementById('btn-toggle-boxes');
-
-  // Stats elements
   const statStrokes = document.getElementById('stat-strokes');
   const statClusters = document.getElementById('stat-clusters');
   const statSequence = document.getElementById('stat-sequence');
-
-  // Initialize Recognizer
-  const recognizer = new Recognizer();
+  const status = document.getElementById('app-status');
+  const offlineStatus = document.getElementById('offline-status');
+  const canvasManager = new CanvasManager(inkCanvas, overlayCanvas, { debounceMs: 250 });
+  const worker = new Worker(new URL('./recognition/recognition.worker.js', import.meta.url), { type: 'module' });
+  let revision = 0;
   let modelReady = false;
+  let pendingRows = [];
+  let writingScale = 36;
+  let repairCandidates = [];
 
-  // Initialize Canvas Manager
-  const canvasManager = new CanvasManager(inkCanvas, overlayCanvas, {
-    penColor: '#0f172a',
-    penWidth: 4,
-    showBoundingBoxes: true,
-    debounceMs: 300
-  });
-
-  // Load the CNN model asynchronously without blocking canvas interaction
-  try {
-    modelReady = await recognizer.loadModel('./public/model/model.json');
-    if (modelReady) {
-      console.log('Math Model Ready for On-Device Inference');
-    }
-  } catch (err) {
-    console.error('Model load failed:', err);
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
+      .then(() => navigator.serviceWorker.ready)
+      .then(() => { offlineStatus.textContent = ' • Offline saved'; })
+      .catch(error => console.warn('Offline cache unavailable:', error));
   }
 
-  // Callback when EquationBlocks are updated
-  canvasManager.onClustersUpdated = async (blocks) => {
+  function showSummary() {
     statStrokes.textContent = canvasManager.strokes.length;
+    statClusters.textContent = canvasManager.blocks.reduce((n, b) => n + b.clusters.length, 0);
+    statSequence.textContent = canvasManager.blocks.length
+      ? canvasManager.blocks.map(b => {
+        const expression = b.clusters.map(c => c.predictedSymbol || '?').join(' ');
+        return `[${b.id}: ${expression}${b.evaluatedResult ? ` → ${b.evaluatedResult}` : ''}]`;
+      }).join('  |  ')
+      : '[ none ]';
+  }
 
-    let totalChars = 0;
-    blocks.forEach(b => totalChars += b.clusters.length);
-    statClusters.textContent = totalChars;
-
-    if (blocks.length === 0 || totalChars === 0) {
-      statSequence.textContent = '[ none ]';
-      return;
-    }
-
-    const dpr = window.devicePixelRatio || 1;
-
-    // Run recognition on each equation block
-    for (const block of blocks) {
-      if (block.clusters.length === 0) continue;
-
-      if (modelReady) {
-        // Extract 50x50 normalized patches for all characters in this block
-        const patches = block.clusters.map(cluster => {
-          return PatchExtractor.extractPatch(inkCanvas, cluster.bounds, dpr);
-        });
-
-        // Batch predict with GPU/WebGL
-        const predictions = await recognizer.predictBatch(patches);
-
-        const recognizedSymbols = [];
-        predictions.forEach((pred, i) => {
-          const cluster = block.clusters[i];
-          // Check for decimal point (tiny standalone dot)
-          if (cluster.widthPx <= 20 && cluster.heightPx <= 20 && cluster.strokes.length === 1) {
-            cluster.predictedSymbol = '.';
-            cluster.confidence = 0.99;
-          } else {
-            cluster.predictedSymbol = pred.symbol;
-            cluster.confidence = pred.confidence;
-          }
-          recognizedSymbols.push(cluster.predictedSymbol);
-        });
-
-        // Evaluate with BODMAS Math Engine
-        const mathResult = Evaluator.evaluate(recognizedSymbols);
-        block.evaluatedResult = mathResult;
-      }
-    }
-
-    // Redraw overlay canvas with updated symbols and inline answers
+  canvasManager.onCanvasChanged = () => {
+    revision++;
+    pendingRows = [];
+    repairCandidates = [];
+    canvasManager.blocks = [];
     canvasManager.drawOverlay();
-
-    // Update footer sequence display
-    const summary = blocks.map(block => {
-      const expr = block.clusters.map(c => c.predictedSymbol || '?').join(' ');
-      const ans = block.evaluatedResult ? ` ➔ ${block.evaluatedResult}` : '';
-      return `[${block.id}: ${expr}${ans}]`;
-    }).join('  |  ');
-    statSequence.textContent = summary;
+    showSummary();
+  };
+  canvasManager.onStrokesReady = strokes => {
+    const serialized = strokes.map(s => ({
+      id: s.id, color: s.color, width: s.width,
+      points: s.points.map(p => ({ x: p.x, y: p.y, pressure: p.pressure }))
+    }));
+    worker.postMessage({ type: 'group', revision, strokes: serialized });
   };
 
-  // Tool Switching
-  btnPen.addEventListener('click', () => {
-    canvasManager.setTool('pen');
-    btnPen.classList.add('active');
-    btnEraser.classList.remove('active');
-  });
-
-  btnEraser.addEventListener('click', () => {
-    canvasManager.setTool('eraser');
-    btnEraser.classList.add('active');
-    btnPen.classList.remove('active');
-  });
-
-  // Pen Width
-  widthButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      widthButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const width = parseInt(btn.getAttribute('data-width'), 10);
-      canvasManager.setPenWidth(width);
-    });
-  });
-
-  // History Controls
-  btnUndo.addEventListener('click', () => {
-    canvasManager.undo();
-  });
-
-  btnRedo.addEventListener('click', () => {
-    canvasManager.redo();
-  });
-
-  btnClear.addEventListener('click', () => {
-    if (confirm('Clear the entire canvas?')) {
-      canvasManager.clear();
+  async function extractAndPredict(rows, requestRevision) {
+    const clusters = rows.flatMap(row => row.clusters);
+    if (!clusters.length) {
+      canvasManager.blocks = [];
+      showSummary();
+      return;
     }
-  });
-
-  // Toggle Bounding Boxes
-  let showBoxes = true;
-  btnToggleBoxes.addEventListener('click', () => {
-    showBoxes = !showBoxes;
-    canvasManager.toggleBoundingBoxes(showBoxes);
-    if (showBoxes) {
-      btnToggleBoxes.classList.add('active');
-      btnToggleBoxes.querySelector('span').textContent = 'Bounding Boxes: ON';
-    } else {
-      btnToggleBoxes.classList.remove('active');
-      btnToggleBoxes.querySelector('span').textContent = 'Bounding Boxes: OFF';
+    if (!modelReady) {
+      canvasManager.blocks = rows;
+      canvasManager.drawOverlay();
+      showSummary();
+      return;
     }
-  });
+    const dpr = window.devicePixelRatio || 1;
+    const patches = [];
+    for (let i = 0; i < clusters.length; i++) {
+      if (requestRevision !== revision) return;
+      patches.push(PatchExtractor.extractPatch(inkCanvas, clusters[i].bounds, dpr).buffer);
+      if (i % 8 === 7) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    if (requestRevision === revision) {
+      worker.postMessage({ type: 'predict', revision, patches }, patches);
+    }
+  }
 
-  // Keyboard Shortcuts
-  window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        canvasManager.redo();
-      } else {
-        canvasManager.undo();
+  function joinedBounds(a, b) {
+    return {
+      minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY),
+      maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY)
+    };
+  }
+
+  function reconsiderLocalGrouping() {
+    const patches = [];
+    repairCandidates = [];
+    const dpr = window.devicePixelRatio || 1;
+    canvasManager.blocks.forEach((block, blockIndex) => {
+      if (block.evaluatedResult !== 'Error') return;
+      const clusters = block.clusters;
+      for (let i = 0; i < clusters.length && repairCandidates.length < 8; i++) {
+        const current = clusters[i];
+        if (current.weakJoin && current.strokeBounds?.length === 2 &&
+            current.predictedSymbol !== '=') {
+          const start = patches.length;
+          const bounds = [...current.strokeBounds].sort((a, b) => a.minX - b.minX);
+          bounds.forEach(b => patches.push(PatchExtractor.extractPatch(inkCanvas, b, dpr).buffer));
+          repairCandidates.push({ kind: 'split', blockIndex, index: i, start, count: 2, bounds });
+        }
+        if (i + 1 >= clusters.length) continue;
+        const next = clusters[i + 1];
+        const b = joinedBounds(current.bounds, next.bounds);
+        const gap = next.bounds.minX - current.bounds.maxX;
+        const uncertain = Math.min(current.confidence ?? 1, next.confidence ?? 1) < 0.8;
+        if (uncertain && gap <= writingScale * 0.13 &&
+            b.maxX - b.minX <= writingScale * 1.65 &&
+            b.maxY - b.minY <= writingScale * 2.15) {
+          const start = patches.length;
+          patches.push(PatchExtractor.extractPatch(inkCanvas, b, dpr).buffer);
+          repairCandidates.push({ kind: 'merge', blockIndex, index: i, start, count: 1, bounds: b });
+        }
       }
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-      e.preventDefault();
+    });
+    if (patches.length) worker.postMessage({ type: 'predict', purpose: 'repair', revision, patches }, patches);
+  }
+
+  function applyRepair(predictions) {
+    const bestByBlock = new Map();
+    for (const candidate of repairCandidates) {
+      const block = canvasManager.blocks[candidate.blockIndex];
+      if (!block || block.evaluatedResult !== 'Error') continue;
+      const proposed = predictions.slice(candidate.start, candidate.start + candidate.count);
+      const confidence = Math.min(...proposed.map(p => p.confidence));
+      if (confidence < 0.85) continue;
+      const symbols = block.clusters.map(c => c.predictedSymbol);
+      symbols.splice(candidate.index, candidate.kind === 'split' ? 1 : 2,
+        ...proposed.map(p => p.symbol));
+      const answer = Evaluator.evaluate(symbols);
+      if (!answer || answer === 'Error') continue;
+      if (!bestByBlock.has(candidate.blockIndex) || confidence > bestByBlock.get(candidate.blockIndex).confidence) {
+        bestByBlock.set(candidate.blockIndex, { candidate, proposed, confidence, answer });
+      }
+    }
+    for (const [blockIndex, choice] of bestByBlock) {
+      const block = canvasManager.blocks[blockIndex];
+      const { candidate, proposed, answer } = choice;
+      const old = block.clusters[candidate.index];
+      const bounds = Array.isArray(candidate.bounds) ? candidate.bounds : [candidate.bounds];
+      const replacements = proposed.map((prediction, i) => {
+        const b = bounds[i];
+        return {
+          ...old, bounds: b, centerY: (b.minY + b.maxY) / 2,
+          widthPx: b.maxX - b.minX, heightPx: b.maxY - b.minY,
+          predictedSymbol: prediction.symbol, confidence: prediction.confidence,
+          strokeCount: candidate.kind === 'split' ? 1 : old.strokeCount + block.clusters[candidate.index + 1].strokeCount
+        };
+      });
+      block.clusters.splice(candidate.index, candidate.kind === 'split' ? 1 : 2, ...replacements);
+      block.evaluatedResult = answer;
+    }
+    canvasManager.drawOverlay();
+    showSummary();
+    repairCandidates = [];
+  }
+
+  worker.onmessage = ({ data }) => {
+    if (data.type === 'ready') {
+      modelReady = true;
+      status.textContent = 'Ready';
+      canvasManager.updateClusters();
+      return;
+    }
+    if (data.type === 'error') {
+      if (data.revision === undefined || data.revision === revision) {
+        status.textContent = 'Recognition unavailable';
+        console.error('CalcInk recognition:', data.message);
+      }
+      return;
+    }
+    if (data.revision !== revision) return;
+    if (data.type === 'grouped') {
+      pendingRows = data.blocks;
+      writingScale = data.scale;
+      canvasManager.blocks = pendingRows;
+      canvasManager.drawOverlay();
+      showSummary();
+      extractAndPredict(pendingRows, revision);
+    } else if (data.type === 'predicted') {
+      if (data.purpose === 'repair') {
+        applyRepair(data.predictions);
+        return;
+      }
+      const clusters = pendingRows.flatMap(row => row.clusters);
+      if (clusters.length !== data.predictions.length) return;
+      clusters.forEach((cluster, i) => {
+        const prediction = data.predictions[i];
+        const smallMark = cluster.strokeCount === 1 &&
+          Math.max(cluster.widthPx, cluster.heightPx) <= Math.max(10, writingScale * 0.24);
+        cluster.predictedSymbol = smallMark ? '.' : cluster.shapeSuggestion || prediction.symbol;
+        cluster.confidence = smallMark || cluster.shapeSuggestion ? null : prediction.confidence;
+        cluster.candidates = prediction.candidates;
+        cluster.source = smallMark ? 'dot' : cluster.shapeSuggestion ? 'shape' : 'model';
+      });
+      canvasManager.blocks = splitAtEquals(pendingRows);
+      canvasManager.drawOverlay();
+      showSummary();
+      reconsiderLocalGrouping();
+    }
+  };
+  worker.onerror = event => {
+    status.textContent = 'Recognition unavailable';
+    console.error('CalcInk worker:', event.message);
+  };
+  worker.postMessage({ type: 'init' });
+
+  const toolButtons = {
+    pen: document.getElementById('btn-pen'),
+    eraser: document.getElementById('btn-eraser'),
+    'pixel-eraser': document.getElementById('btn-pixel-eraser')
+  };
+  for (const [tool, button] of Object.entries(toolButtons)) {
+    button.addEventListener('click', () => {
+      canvasManager.setTool(tool);
+      Object.values(toolButtons).forEach(b => b.classList.remove('active'));
+      button.classList.add('active');
+    });
+  }
+  for (const button of document.querySelectorAll('[data-width]')) {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-width]').forEach(b => b.classList.remove('active'));
+      button.classList.add('active');
+      canvasManager.setPenWidth(Number(button.dataset.width));
+    });
+  }
+  document.getElementById('btn-undo').addEventListener('click', () => canvasManager.undo());
+  document.getElementById('btn-redo').addEventListener('click', () => canvasManager.redo());
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    if (window.confirm('Clear the entire canvas?')) canvasManager.clear();
+  });
+  const boxButton = document.getElementById('btn-toggle-boxes');
+  boxButton.addEventListener('click', () => {
+    canvasManager.toggleBoundingBoxes(!canvasManager.options.showBoundingBoxes);
+    boxButton.classList.toggle('active', canvasManager.options.showBoundingBoxes);
+    boxButton.querySelector('span').textContent =
+      `Bounding Boxes: ${canvasManager.options.showBoundingBoxes ? 'ON' : 'OFF'}`;
+  });
+  let sampleUrl = null;
+  document.getElementById('btn-save-sample').addEventListener('click', () => {
+    const rect = inkCanvas.getBoundingClientRect();
+    const sample = {
+      schema: 1,
+      expected: '',
+      canvas: { width: rect.width, height: rect.height },
+      strokes: canvasManager.strokes.map(s => ({
+        width: s.width,
+        points: s.points.map(p => ({ x: p.x, y: p.y }))
+      })),
+      observed: canvasManager.blocks.map(block => ({
+        symbols: block.clusters.map(c => c.predictedSymbol || '?').join(''),
+        result: block.evaluatedResult || '',
+        clusters: block.clusters.map(c => ({
+          bounds: c.bounds, symbol: c.predictedSymbol || '?', source: c.source || 'pending',
+          confidence: c.confidence, candidates: c.candidates || []
+        }))
+      }))
+    };
+    const json = JSON.stringify(sample, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    if (sampleUrl) URL.revokeObjectURL(sampleUrl);
+    const url = URL.createObjectURL(blob);
+    sampleUrl = url;
+    const download = document.getElementById('sample-download');
+    download.href = url;
+    download.download = `calcink-sample-${Date.now()}.json`;
+    document.getElementById('sample-json').value = json;
+    document.getElementById('sample-dialog').showModal();
+  });
+  document.getElementById('sample-copy').addEventListener('click', async () => {
+    const field = document.getElementById('sample-json');
+    try {
+      await navigator.clipboard.writeText(field.value);
+      document.getElementById('sample-copy').textContent = 'Copied';
+    } catch {
+      field.focus();
+      field.select();
+      document.getElementById('sample-copy').textContent = 'Selected — press Ctrl+C';
+    }
+  });
+  document.getElementById('sample-close').addEventListener('click', () => {
+    document.getElementById('sample-dialog').close();
+    document.getElementById('sample-copy').textContent = 'Copy JSON';
+  });
+  window.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      event.shiftKey ? canvasManager.redo() : canvasManager.undo();
+    } else if (event.key.toLowerCase() === 'y') {
+      event.preventDefault();
       canvasManager.redo();
     }
   });

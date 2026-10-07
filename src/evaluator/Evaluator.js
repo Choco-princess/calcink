@@ -1,177 +1,65 @@
-/**
- * Deterministic BODMAS / PEMDAS Arithmetic Evaluator.
- * 
- * Rules:
- * 1. Supports multi-digit integers, floating-point decimals, negative numbers.
- * 2. Strict operator precedence: × and ÷ before + and -.
- * 3. Left-associative for equal precedence.
- * 4. Zero division handling: returns 'Undefined'.
- * 5. Safe execution: NO eval() or Function() used.
- */
-
+// A small strict parser for the competition's 16-symbol vocabulary.
+// Only a terminal '=' requests a result. Unknown or malformed input is never
+// silently discarded, and JavaScript eval is never used.
 export class Evaluator {
-  /**
-   * Tokenize an array of raw symbol strings (e.g. ['1', '8', '+', '4', '×', '3', '='])
-   * into numbers and operators.
-   */
-  static tokenize(symbols) {
-    const tokens = [];
-    let currentNumber = '';
-
-    for (let i = 0; i < symbols.length; i++) {
-      const s = symbols[i];
-
-      if (s === '=') {
-        if (currentNumber !== '') {
-          tokens.push({ type: 'number', value: parseFloat(currentNumber) });
-          currentNumber = '';
-        }
-        tokens.push({ type: 'equals', value: '=' });
-        break; // terminal symbol
-      }
-
-      // Check if it's part of a number (digit or decimal point)
-      if (/^[0-9]$/.test(s) || s === '.') {
-        if (s === '.' && currentNumber.includes('.')) {
-          // Ignore secondary decimal points in the same number
-          continue;
-        }
-        currentNumber += s;
-      } else if (['+', '-', '×', '÷', '*', '/'].includes(s)) {
-        if (currentNumber !== '') {
-          tokens.push({ type: 'number', value: parseFloat(currentNumber) });
-          currentNumber = '';
-        } else if (s === '-' && (tokens.length === 0 || tokens[tokens.length - 1].type === 'operator')) {
-          // Unary minus for negative number (e.g. -5 or 4 * -2)
-          currentNumber = '-';
-          continue;
-        }
-
-        // Standardize operators
-        let op = s;
-        if (op === '*') op = '×';
-        if (op === '/') op = '÷';
-
-        tokens.push({ type: 'operator', value: op });
-      }
-    }
-
-    if (currentNumber !== '' && currentNumber !== '-') {
-      tokens.push({ type: 'number', value: parseFloat(currentNumber) });
-    }
-
-    return tokens;
-  }
-
-  /**
-   * Parse and evaluate tokens using Shunting-Yard algorithm (BODMAS).
-   * @param {Array} tokens
-   * @returns {string} Result string or 'Undefined' or 'Error'
-   */
-  static evaluateTokens(tokens) {
-    if (!tokens || tokens.length === 0) return '';
-
-    // Filter out trailing equals sign if present
-    const mathTokens = tokens.filter(t => t.type !== 'equals');
-    if (mathTokens.length === 0) return '';
-
-    // If starts or ends with invalid operator sequence
-    if (mathTokens[mathTokens.length - 1].type === 'operator') {
-      return ''; // Incomplete expression, don't show error yet
-    }
-
-    const precedence = {
-      '+': 1,
-      '-': 1,
-      '×': 2,
-      '÷': 2
-    };
-
-    // Shunting-Yard Algorithm to convert to Postfix (RPN)
-    const outputQueue = [];
-    const operatorStack = [];
-
-    for (const token of mathTokens) {
-      if (token.type === 'number') {
-        outputQueue.push(token.value);
-      } else if (token.type === 'operator') {
-        const o1 = token.value;
-        while (
-          operatorStack.length > 0 &&
-          precedence[operatorStack[operatorStack.length - 1]] >= precedence[o1]
-        ) {
-          outputQueue.push(operatorStack.pop());
-        }
-        operatorStack.push(o1);
-      }
-    }
-
-    while (operatorStack.length > 0) {
-      outputQueue.push(operatorStack.pop());
-    }
-
-    // Evaluate Postfix expression
-    const evalStack = [];
-
-    for (const item of outputQueue) {
-      if (typeof item === 'number') {
-        evalStack.push(item);
-      } else {
-        const b = evalStack.pop();
-        const a = evalStack.pop();
-
-        if (a === undefined || b === undefined) {
-          return 'Error';
-        }
-
-        let res;
-        switch (item) {
-          case '+':
-            res = a + b;
-            break;
-          case '-':
-            res = a - b;
-            break;
-          case '×':
-            res = a * b;
-            break;
-          case '÷':
-            if (b === 0) {
-              return 'Undefined'; // Division by zero
-            }
-            res = a / b;
-            break;
-          default:
-            return 'Error';
-        }
-
-        evalStack.push(res);
-      }
-    }
-
-    if (evalStack.length !== 1) return 'Error';
-
-    const finalAnswer = evalStack[0];
-    if (isNaN(finalAnswer)) return 'Error';
-    if (!isFinite(finalAnswer)) return 'Undefined';
-
-    // Format cleanly (e.g. 5 or 3.1416)
-    return Number.isInteger(finalAnswer)
-      ? finalAnswer.toString()
-      : parseFloat(finalAnswer.toFixed(4)).toString();
-  }
-
-  /**
-   * High-level evaluation: takes raw predicted symbols array and returns evaluated result.
-   */
   static evaluate(symbols) {
-    const tokens = Evaluator.tokenize(symbols);
-    // Only evaluate if expression has an '=' sign or at least one operator
-    const hasEquals = symbols.includes('=');
-    const hasOperator = tokens.some(t => t.type === 'operator');
+    if (!symbols.includes('=')) return '';
+    if (symbols.at(-1) !== '=' || symbols.slice(0, -1).includes('=')) return 'Error';
+    const input = symbols.slice(0, -1);
+    if (!input.length) return 'Error';
+    let i = 0;
 
-    if (!hasEquals && !hasOperator) return '';
+    function number() {
+      let value = '';
+      let digits = 0;
+      let dots = 0;
+      while (i < input.length && (/^[0-9]$/.test(input[i]) || input[i] === '.')) {
+        if (input[i] === '.') dots++;
+        else digits++;
+        value += input[i++];
+      }
+      if (!digits || dots > 1 || value.endsWith('.')) throw new Error('Malformed number');
+      const result = Number(value);
+      if (!Number.isFinite(result)) throw new Error('Number out of range');
+      return result;
+    }
 
-    return Evaluator.evaluateTokens(tokens);
+    function factor() {
+      const negative = input[i] === '-';
+      if (negative) i++;
+      const value = number();
+      return negative ? -value : value;
+    }
+
+    function term() {
+      let value = factor();
+      while (input[i] === '×' || input[i] === '÷') {
+        const op = input[i++];
+        const rhs = factor();
+        if (op === '÷' && rhs === 0) throw new RangeError('Division by zero');
+        value = op === '×' ? value * rhs : value / rhs;
+      }
+      return value;
+    }
+
+    function expression() {
+      let value = term();
+      while (input[i] === '+' || input[i] === '-') {
+        const op = input[i++];
+        const rhs = term();
+        value = op === '+' ? value + rhs : value - rhs;
+      }
+      return value;
+    }
+
+    try {
+      const answer = expression();
+      if (i !== input.length) return 'Error';
+      if (!Number.isFinite(answer)) return 'Undefined';
+      const rounded = Number(answer.toFixed(4));
+      return Object.is(rounded, -0) ? '0' : rounded.toString();
+    } catch (error) {
+      return error instanceof RangeError ? 'Undefined' : 'Error';
+    }
   }
 }

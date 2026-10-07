@@ -1,122 +1,80 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Stroke } from './src/segmentation/Stroke.js';
 import { Grouper } from './src/segmentation/Grouper.js';
 
-function runTests() {
-  console.log('🧪 Starting CalcInk Hybrid Architecture Tests...\n');
+// Saved vector drawings. Each nested expected group lists the input stroke
+// indices in one symbol; outer groups are equation blocks in reading order.
+const fixtures = [
+  { name: 'stacked aligned rows', strokes: [
+    [[100, 50], [100, 130]], [[150, 70], [150, 110]], [[130, 90], [170, 90]],
+    [[100, 200], [100, 280]], [[150, 220], [150, 260]], [[130, 240], [170, 240]]
+  ], expected: [[[0], [1, 2]], [[3], [4, 5]]] },
+  { name: 'side by side equations', strokes: [
+    [[100, 200], [100, 280]], [[150, 220], [150, 260]], [[130, 240], [170, 240]],
+    [[500, 200], [500, 280]]
+  ], expected: [[[0], [1, 2]], [[3]]] },
+  { name: 'tight expression without domino merge', strokes: [
+    [[100, 50], [120, 50], [120, 100]], [[145, 60], [145, 90]], [[130, 75], [160, 75]],
+    [[170, 50], [200, 50], [170, 100], [200, 100]],
+    [[210, 70], [240, 70]], [[210, 85], [240, 85]],
+    [[250, 50], [250, 80], [280, 80]], [[275, 50], [275, 100]]
+  ], expected: [[[0], [1, 2], [3], [4, 5], [6, 7]]] },
+  { name: 'equals bars', strokes: [[[300, 80], [350, 80]], [[300, 110], [350, 110]]], expected: [[[0, 1]]] },
+  { name: 'one with base', strokes: [[[60, 50], [60, 120]], [[45, 122], [75, 122]]], expected: [[[0, 1]]] },
+  { name: 'small decimal beside number', strokes: [
+    [[20, 20], [40, 20], [40, 65]], [[54, 62]], [[70, 20], [90, 20], [70, 65], [90, 65]]
+  ], expected: [[[0], [1], [2]]] },
+  { name: 'division dots and bar', strokes: [
+    [[50, 35]], [[35, 55], [65, 55]], [[50, 75]]
+  ], expected: [[[0, 1, 2]]] },
+  { name: 'three drawn as two arcs', strokes: [
+    [[20, 30], [40, 25], [50, 40], [35, 50]],
+    [[35, 53], [50, 65], [40, 80], [20, 75]]
+  ], expected: [[[0, 1]]] },
+  { name: 'eight drawn as two loops', strokes: [
+    [[20, 40], [30, 25], [45, 30], [45, 45], [30, 50], [20, 40]],
+    [[30, 52], [45, 55], [50, 70], [35, 82], [20, 70], [30, 52]]
+  ], expected: [[[0, 1]]] },
+  { name: 'four with separate right stem', strokes: [
+    [[20, 25], [20, 55], [45, 55]], [[49, 22], [49, 80]]
+  ], expected: [[[0, 1]]] },
+  { name: 'close independent strokes', strokes: [
+    [[20, 20], [20, 70]], [[30, 20], [30, 70]]
+  ], expected: [[[0], [1]]] },
+  { name: 'partial second row', strokes: [
+    [[20, 20], [20, 70]], [[70, 20], [70, 70]], [[20, 115], [20, 165]]
+  ], expected: [[[0], [1]], [[2]]] },
+  { name: 'slightly tilted row', strokes: [
+    [[20, 20], [20, 70]], [[80, 26], [80, 76]], [[140, 32], [140, 82]]
+  ], expected: [[[0], [1], [2]]] }
+];
 
-  // Test 1: Stacked equations with vertically aligned '1's (Error Class 1 Fix)
-  // Equation 1 at y=80: '1 + 2'
-  const eq1_one = new Stroke();
-  eq1_one.addPoint(100, 50);
-  eq1_one.addPoint(100, 130); // tall 1
-
-  const eq1_plusV = new Stroke();
-  eq1_plusV.addPoint(150, 70);
-  eq1_plusV.addPoint(150, 110);
-  const eq1_plusH = new Stroke();
-  eq1_plusH.addPoint(130, 90);
-  eq1_plusH.addPoint(170, 90);
-
-  // Equation 2 at y=220: '1 + 5' (top 1 and bottom 1 share x=100!)
-  const eq2_one = new Stroke();
-  eq2_one.addPoint(100, 200);
-  eq2_one.addPoint(100, 280); // tall 1 directly below eq1_one
-
-  const eq2_plusV = new Stroke();
-  eq2_plusV.addPoint(150, 220);
-  eq2_plusV.addPoint(150, 260);
-  const eq2_plusH = new Stroke();
-  eq2_plusH.addPoint(130, 240);
-  eq2_plusH.addPoint(170, 240);
-
-  const stackedBlocks = Grouper.groupStrokesIntoLines([
-    eq1_one, eq1_plusV, eq1_plusH,
-    eq2_one, eq2_plusV, eq2_plusH
-  ]);
-
-  console.assert(stackedBlocks.length === 2, `Test 1 Failed: Expected 2 equations, got ${stackedBlocks.length}`);
-  console.assert(stackedBlocks[0].clusters.length === 2, `Test 1 Failed: Eq 1 expected 2 clusters, got ${stackedBlocks[0].clusters.length}`);
-  console.assert(stackedBlocks[1].clusters.length === 2, `Test 1 Failed: Eq 2 expected 2 clusters, got ${stackedBlocks[1].clusters.length}`);
-  console.log('✅ Test 1 Passed: Stacked equations with vertically aligned "1"s cleanly separated into Eq 1 and Eq 2 (No column merging!).');
-
-  // Test 2: Side-by-side equations with horizontal whitespace gap (Error Class 2 Fix)
-  // Left equation at x=100..200, y=200
-  // Right equation at x=500..600, y=200 (same vertical Y band!)
-  const right_one = new Stroke();
-  right_one.addPoint(500, 200);
-  right_one.addPoint(500, 280);
-
-  const sideBySideBlocks = Grouper.groupStrokesIntoLines([
-    eq2_one, eq2_plusV, eq2_plusH,
-    right_one
-  ]);
-
-  console.assert(sideBySideBlocks.length === 2, `Test 2 Failed: Expected 2 separate equation blocks, got ${sideBySideBlocks.length}`);
-  console.log('✅ Test 2 Passed: Side-by-side equations on same Y band cleanly split into distinct equation blocks.');
-
-  // Test 3: Tight equation '3 + 2 = 4' (Anti-domino)
-  const char3 = new Stroke();
-  char3.addPoint(100, 50);
-  char3.addPoint(120, 50);
-  char3.addPoint(120, 100);
-
-  const plusV = new Stroke();
-  plusV.addPoint(145, 60);
-  plusV.addPoint(145, 90);
-  const plusH = new Stroke();
-  plusH.addPoint(130, 75);
-  plusH.addPoint(160, 75);
-
-  const char2 = new Stroke();
-  char2.addPoint(170, 50);
-  char2.addPoint(200, 50);
-  char2.addPoint(170, 100);
-  char2.addPoint(200, 100);
-
-  const eqTop = new Stroke();
-  eqTop.addPoint(210, 70);
-  eqTop.addPoint(240, 70);
-  const eqBot = new Stroke();
-  eqBot.addPoint(210, 85);
-  eqBot.addPoint(240, 85);
-
-  const char4 = new Stroke();
-  char4.addPoint(250, 50);
-  char4.addPoint(250, 80);
-  char4.addPoint(280, 80);
-  const char4Stem = new Stroke();
-  char4Stem.addPoint(275, 50);
-  char4Stem.addPoint(275, 100);
-
-  const tightBlocks = Grouper.groupStrokesIntoLines([char3, plusV, plusH, char2, eqTop, eqBot, char4, char4Stem]);
-  console.assert(tightBlocks[0].clusters.length === 5, `Test 3 Failed: Expected 5 clusters, got ${tightBlocks[0].clusters.length}`);
-  console.log('✅ Test 3 Passed: Tight equation "3+2=4" produced exactly 5 distinct characters.');
-
-  // Test 4: Equals sign '=' with wide gap
-  const topBar = new Stroke();
-  topBar.addPoint(300, 80);
-  topBar.addPoint(350, 80);
-  const botBar = new Stroke();
-  botBar.addPoint(300, 110);
-  botBar.addPoint(350, 110);
-
-  const eqBlocks = Grouper.groupStrokesIntoLines([topBar, botBar]);
-  console.assert(eqBlocks[0].clusters.length === 1, `Test 4 Failed: Expected 1 cluster for '=', got ${eqBlocks[0].clusters.length}`);
-  console.log('✅ Test 4 Passed: Spaced horizontal bars for "=" cleanly merged into 1 cluster.');
-
-  // Test 5: Multi-stroke '1' with base bar '_'
-  const oneStem = new Stroke();
-  oneStem.addPoint(60, 50);
-  oneStem.addPoint(60, 120);
-  const oneBase = new Stroke();
-  oneBase.addPoint(45, 122);
-  oneBase.addPoint(75, 122);
-
-  const oneBlocks = Grouper.groupStrokesIntoLines([oneStem, oneBase]);
-  console.assert(oneBlocks[0].clusters.length === 1, `Test 5 Failed: Expected 1 cluster for '1', got ${oneBlocks[0].clusters.length}`);
-  console.log('✅ Test 5 Passed: Stem and base bar for "1" cleanly merged into 1 cluster.');
-
-  console.log('\n🎉 ALL HYBRID ARCHITECTURE TESTS PASSED PERFECTLY!');
+function makeStroke(points, scale, width) {
+  const stroke = new Stroke();
+  stroke.width = width;
+  for (const [x, y] of points) stroke.addPoint(x * scale, y * scale);
+  return stroke;
 }
 
-runTests();
+for (const fixture of fixtures) {
+  for (const scale of [0.75, 1, 1.5]) {
+    for (const width of [2, 4, 7]) {
+      const strokes = fixture.strokes.map(points => makeStroke(points, scale, width));
+      const blocks = Grouper.groupStrokesIntoLines(strokes);
+      const membership = blocks.map(block => block.clusters.map(cluster =>
+        cluster.strokes.map(stroke => strokes.indexOf(stroke)).sort((a, b) => a - b)));
+      assert.deepEqual(membership, fixture.expected,
+        `${fixture.name}, scale ${scale}, pen ${width}`);
+    }
+  }
+}
+
+const saved = JSON.parse(readFileSync(new URL('./samples/user-8-9-2026-10-05.json', import.meta.url), 'utf8'));
+const savedStrokes = saved.strokes.map(raw => makeStroke(raw.points.map(p => [p.x, p.y]), 1, raw.width));
+const savedGroups = Grouper.groupStrokesIntoLines(savedStrokes);
+assert.deepEqual(savedGroups.map(row => row.clusters.map(cluster =>
+  cluster.strokes.map(stroke => savedStrokes.indexOf(stroke)))),
+[[[0], [1], [2], [3], [4], [5], [6], [7]]], 'real 8/9 sample grouping');
+
+console.log(`${fixtures.length * 9 + 1} grouping cases passed`);

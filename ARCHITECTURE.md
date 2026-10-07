@@ -16,6 +16,14 @@ Pointer input → CSS-pixel strokes → worker grouping → symbol boxes
 
 The drawing canvas and result overlay stay on the main thread. Grouping and inference run in one worker. Patch extraction reads small canvas regions in chunks and yields between groups. Each edit increments a revision; worker replies for earlier revisions are ignored.
 
+## Notebook and navigation
+
+The app now keeps a notebook of independent pages. Each page holds its vector strokes and manual symbol corrections, while the active page alone is sent through grouping, recognition, and evaluation. Switching pages increments the recognition revision, clears old results, and redraws the selected page; a late worker response from the previous page cannot replace it. Undo/Redo history is reset when opening another page so an edit cannot silently cross pages.
+
+`Notebook.js` serializes strokes to plain JSON, recreates their bounds when opening a page, validates imported notebooks, and stores the notebook in IndexedDB. Autosave is debounced after edits and specifically after a stroke finishes. Export downloads the entire notebook; Import validates a file and replaces the current notebook only after confirmation. There is no server sync. The browser or operating system may clear local storage, so Export is the portable backup. The separate Save Sample action remains a current-page diagnostic export.
+
+Each page has a fixed logical size of 1100×800 CSS pixels. A scrollable viewport exposes the rest of the page on smaller screens. Zoom scales the visual sheet from 50% to 200%, while stored strokes, eraser geometry, and recognition bounds remain in unscaled page coordinates. Pointer positions are divided by the displayed scale. Move mode drags the viewport instead of adding ink. Stylus only mode filters touch pointers from drawing and erasing; it accepts pen and mouse pointers, while Move still works with touch. This is a practical finger filter rather than device-level palm rejection.
+
 The default canvas view shows ink and answers without diagnostic boxes. A short first-use hint disappears after drawing begins. In Pen mode, a stationary tap on an existing recognized symbol opens a correction picker, while a moving pointer draws normally. A manual choice is keyed to the symbol's stroke IDs, reapplied after recognition, and recalculates the expression. Corrections to changed or regrouped strokes are deliberately discarded. Answers fade in briefly unless reduced motion is requested.
 
 ## Coordinates and editing
@@ -44,6 +52,8 @@ If recognition remains weak on a broader labeled sample set, compare a replaceme
 TensorFlow.js and its WASM files are installed as local dependencies and bundled into the production build. The worker prefers WASM, then CPU if necessary. Model failure is shown as a visible unavailable state rather than leaving an unhandled exception.
 
 The parser accepts multi-digit and decimal numbers, unary minus, and `+ − × ÷` with standard precedence. It requires a terminal `=`; incomplete writing stays blank. Repeated decimal points, unexpected symbols, and malformed operator sequences return `Error`. Division by zero returns `Undefined`. Results are rounded to four decimal places for display.
+
+The evaluator also returns a short explanation for the visible status line: unfinished equation, unread symbol, invalid symbol order, division by zero, or a valid result. This does not change the strict arithmetic results.
 
 ## Offline build and verification
 

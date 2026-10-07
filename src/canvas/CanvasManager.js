@@ -18,7 +18,8 @@ export class CanvasManager {
       ...options
     };
 
-    this.currentTool = 'pen'; // 'pen' | 'eraser' | 'pixel-eraser'
+    this.currentTool = 'pen'; // 'pen' | 'eraser' | 'pixel-eraser' | 'move'
+    this.stylusOnly = false;
     this.strokes = [];
     this.activeStroke = null;
     this.isDrawing = false;
@@ -27,10 +28,12 @@ export class CanvasManager {
     this.history = new HistoryManager();
     this.debounceTimer = null;
     this.onCanvasChanged = null;
+    this.onStrokeCommitted = null;
     this.onStrokesReady = null;
     this.onSymbolTap = null;
     this.activePointerId = null;
     this.eraseHistoryPushed = false;
+    this.panStart = null;
     this.answerAnimations = new Map();
     this.animationFrame = null;
 
@@ -43,9 +46,9 @@ export class CanvasManager {
 
   initCanvasSize() {
     const dpr = window.devicePixelRatio || 1;
-    const rect = this.inkCanvas.parentElement.getBoundingClientRect();
-    const width = Math.max(1, Math.floor(rect.width));
-    const height = Math.max(1, Math.floor(rect.height));
+    const page = this.inkCanvas.parentElement;
+    const width = Math.max(1, Math.floor(page.clientWidth));
+    const height = Math.max(1, Math.floor(page.clientHeight));
     const backing = backingSize(width, height, dpr);
 
     [this.inkCanvas, this.overlayCanvas].forEach(canvas => {
@@ -69,7 +72,7 @@ export class CanvasManager {
   getPointerPos(e) {
     const rect = this.inkCanvas.getBoundingClientRect();
     return {
-      ...pointerPosition(e.clientX, e.clientY, rect),
+      ...pointerPosition(e.clientX, e.clientY, rect, this.inkCanvas.clientWidth, this.inkCanvas.clientHeight),
       pressure: e.pressure || 0.5
     };
   }
@@ -85,10 +88,16 @@ export class CanvasManager {
 
   onPointerDown(e) {
     if (this.isDrawing) return;
+    if (this.currentTool !== 'move' && this.stylusOnly && e.pointerType === 'touch') return;
     e.preventDefault();
     this.isDrawing = true;
     this.activePointerId = e.pointerId;
     this.overlayCanvas.setPointerCapture(e.pointerId);
+    if (this.currentTool === 'move') {
+      const viewport = this.overlayCanvas.closest('.canvas-wrapper');
+      this.panStart = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+      return;
+    }
     const pos = this.getPointerPos(e);
 
     if (this.currentTool === 'pen') {
@@ -106,6 +115,12 @@ export class CanvasManager {
   onPointerMove(e) {
     if (!this.isDrawing || e.pointerId !== this.activePointerId) return;
     e.preventDefault();
+    if (this.currentTool === 'move') {
+      const viewport = this.overlayCanvas.closest('.canvas-wrapper');
+      viewport.scrollLeft = this.panStart.left - (e.clientX - this.panStart.x);
+      viewport.scrollTop = this.panStart.top - (e.clientY - this.panStart.y);
+      return;
+    }
     const pos = this.getPointerPos(e);
 
     if (this.currentTool === 'pen' && this.activeStroke) {
@@ -141,6 +156,10 @@ export class CanvasManager {
       this.overlayCanvas.releasePointerCapture(e.pointerId);
     }
     this.activePointerId = null;
+    if (this.currentTool === 'move') {
+      this.panStart = null;
+      return;
+    }
 
     if (this.currentTool === 'pen' && this.activeStroke) {
       if (this.activeStroke.points.length === 1) {
@@ -161,6 +180,7 @@ export class CanvasManager {
       this.strokes.push(this.activeStroke);
       this.redrawAllStrokes();
       this.activeStroke = null;
+      this.onStrokeCommitted?.();
     }
     this.scheduleGrouping();
   }
@@ -196,8 +216,7 @@ export class CanvasManager {
   }
 
   redrawAllStrokes() {
-    const rect = this.inkCanvas.getBoundingClientRect();
-    this.inkCtx.clearRect(0, 0, rect.width, rect.height);
+    this.inkCtx.clearRect(0, 0, this.inkCanvas.clientWidth, this.inkCanvas.clientHeight);
 
     for (const stroke of this.strokes) {
       if (stroke.points.length === 0) continue;
@@ -237,8 +256,7 @@ export class CanvasManager {
   }
 
   drawOverlay() {
-    const rect = this.overlayCanvas.getBoundingClientRect();
-    this.overlayCtx.clearRect(0, 0, rect.width, rect.height);
+    this.overlayCtx.clearRect(0, 0, this.overlayCanvas.clientWidth, this.overlayCanvas.clientHeight);
 
     if (this.blocks.length === 0) {
       this.answerAnimations.clear();
@@ -372,6 +390,21 @@ export class CanvasManager {
 
   setTool(tool) {
     this.currentTool = tool;
+  }
+
+  setStylusOnly(enabled) {
+    this.stylusOnly = enabled;
+  }
+
+  loadStrokes(strokes) {
+    clearTimeout(this.debounceTimer);
+    this.history.clear();
+    this.strokes = strokes;
+    this.blocks = [];
+    this.answerAnimations.clear();
+    this.onCanvasChanged?.();
+    this.redrawAllStrokes();
+    this.scheduleGrouping();
   }
 
   setPenWidth(width) {

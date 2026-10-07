@@ -2,6 +2,7 @@ import { CanvasManager } from './canvas/CanvasManager.js';
 import { PatchExtractor } from './recognition/PatchExtractor.js';
 import { Evaluator } from './evaluator/Evaluator.js';
 import { SYMBOLS, correctionKey, applyManualCorrections } from './recognition/Corrections.js';
+import { blankPage, newNotebook, serializeStrokes, hydrateStrokes, validateNotebook, loadNotebook, saveNotebook } from './notebook/Notebook.js';
 
 function splitAtEquals(rows) {
   const blocks = [];
@@ -25,7 +26,8 @@ function splitAtEquals(rows) {
       maxX: Math.max(b.maxX, c.bounds.maxX),
       maxY: Math.max(b.maxY, c.bounds.maxY)
     }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-    block.evaluatedResult = Evaluator.evaluate(block.clusters.map(c => c.predictedSymbol));
+    block.evaluation = Evaluator.analyze(block.clusters.map(c => c.predictedSymbol));
+    block.evaluatedResult = block.evaluation.result;
   });
   return blocks;
 }
@@ -39,6 +41,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const status = document.getElementById('app-status');
   const offlineStatus = document.getElementById('offline-status');
   const canvasTip = document.getElementById('canvas-tip');
+  const pageSurface = document.getElementById('page-surface');
+  const pageSpacer = document.getElementById('page-spacer');
+  const pageTabs = document.getElementById('page-tabs');
+  const notebookFeedback = document.getElementById('notebook-feedback');
   const correctionDialog = document.getElementById('correction-dialog');
   const correctionContext = document.getElementById('correction-context');
   const correctionOptions = document.getElementById('correction-options');
@@ -52,6 +58,87 @@ window.addEventListener('DOMContentLoaded', () => {
   const manualCorrections = new Map();
   let selectedCluster = null;
   let hasDrawn = false;
+  let book = newNotebook();
+  let zoom = 1;
+  let saveTimer = null;
+  let saveQueue = Promise.resolve();
+  let loadingPage = false;
+  let persistenceAvailable = true;
+  overlayCanvas.style.pointerEvents = 'none';
+
+  const currentPage = () => book.pages.find(page => page.id === book.activePageId);
+  function applyPageSize() {
+    const page = currentPage();
+    pageSurface.style.width = `${page.width}px`;
+    pageSurface.style.height = `${page.height}px`;
+    pageSurface.style.transform = `scale(${zoom})`;
+    pageSpacer.style.width = `${page.width * zoom}px`;
+    pageSpacer.style.height = `${page.height * zoom}px`;
+    document.getElementById('zoom-label').textContent = `${Math.round(zoom * 100)}%`;
+    canvasManager.handleResize();
+  }
+
+  function renderPages() {
+    pageTabs.replaceChildren();
+    book.pages.forEach(page => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `btn${page.id === book.activePageId ? ' active' : ''}`;
+      button.textContent = page.title;
+      button.setAttribute('aria-current', page.id === book.activePageId ? 'page' : 'false');
+      button.addEventListener('click', () => openPage(page.id));
+      pageTabs.append(button);
+    });
+    document.getElementById('btn-delete-page').disabled = book.pages.length === 1;
+  }
+
+  function capturePage() {
+    const page = currentPage();
+    page.strokes = serializeStrokes(canvasManager.strokes);
+    page.corrections = [...manualCorrections];
+  }
+
+  function saveLater() {
+    if (loadingPage || !persistenceAvailable) return;
+    capturePage();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 400);
+  }
+
+  function saveNow() {
+    if (loadingPage || !persistenceAvailable) return;
+    clearTimeout(saveTimer);
+    capturePage();
+    const snapshot = structuredClone(book);
+    saveQueue = saveQueue.then(() => saveNotebook(snapshot)).catch(error => {
+      persistenceAvailable = false;
+      notebookFeedback.textContent = 'Local save unavailable. Export your notebook to keep it.';
+      console.error('CalcInk notebook save:', error);
+    });
+  }
+
+  function openPage(id) {
+    if (id === book.activePageId) return;
+    capturePage();
+    book.activePageId = id;
+    loadPage();
+    saveNow();
+  }
+
+  function loadPage() {
+    loadingPage = true;
+    correctionDialog.close();
+    manualCorrections.clear();
+    for (const [key, value] of currentPage().corrections) manualCorrections.set(key, value);
+    zoom = 1;
+    applyPageSize();
+    canvasManager.loadStrokes(hydrateStrokes(currentPage().strokes));
+    hasDrawn = canvasManager.strokes.length > 0;
+    canvasTip.hidden = hasDrawn;
+    document.querySelector('.canvas-wrapper').scrollTo(0, 0);
+    renderPages();
+    loadingPage = false;
+  }
 
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
@@ -71,6 +158,13 @@ window.addEventListener('DOMContentLoaded', () => {
         return `[${b.id}: ${expression}${b.evaluatedResult ? ` → ${b.evaluatedResult}` : ''}]`;
       }).join('  |  ')
       : '[ none ]';
+    if (!persistenceAvailable) return;
+    const blocks = canvasManager.blocks;
+    if (!canvasManager.strokes.length) notebookFeedback.textContent = 'Write an equation ending in =';
+    else if (blocks.some(b => b.clusters.some(c => !c.predictedSymbol))) notebookFeedback.textContent = 'Reading handwriting…';
+    else notebookFeedback.textContent = blocks.find(b => b.evaluation?.result === 'Error')?.evaluation.feedback ||
+      blocks.find(b => b.evaluation?.result === 'Undefined')?.evaluation.feedback ||
+      blocks.find(b => b.evaluation?.result === '')?.evaluation.feedback || 'Answers updated.';
   }
 
   canvasManager.onCanvasChanged = () => {
@@ -82,7 +176,9 @@ window.addEventListener('DOMContentLoaded', () => {
     canvasManager.blocks = [];
     canvasManager.drawOverlay();
     showSummary();
+    saveLater();
   };
+  canvasManager.onStrokeCommitted = saveNow;
 
   canvasManager.onSymbolTap = (x, y, event) => {
     const padding = event.pointerType === 'touch' ? 12 : 7;
@@ -136,6 +232,7 @@ window.addEventListener('DOMContentLoaded', () => {
     canvasManager.blocks = splitAtEquals(pendingRows);
     canvasManager.drawOverlay();
     showSummary();
+    saveNow();
     correctionDialog.close();
     selectedCluster = null;
   }
@@ -281,6 +378,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (data.type === 'ready') {
       modelReady = true;
       status.textContent = 'Ready';
+      clearTimeout(canvasManager.debounceTimer);
       canvasManager.updateClusters();
       return;
     }
@@ -334,15 +432,77 @@ window.addEventListener('DOMContentLoaded', () => {
   const toolButtons = {
     pen: document.getElementById('btn-pen'),
     eraser: document.getElementById('btn-eraser'),
-    'pixel-eraser': document.getElementById('btn-pixel-eraser')
+    'pixel-eraser': document.getElementById('btn-pixel-eraser'),
+    move: document.getElementById('btn-move')
   };
   for (const [tool, button] of Object.entries(toolButtons)) {
     button.addEventListener('click', () => {
       canvasManager.setTool(tool);
       Object.values(toolButtons).forEach(b => b.classList.remove('active'));
       button.classList.add('active');
+      pageSurface.classList.toggle('is-moving', tool === 'move');
     });
   }
+  const stylusButton = document.getElementById('btn-stylus-only');
+  stylusButton.addEventListener('click', () => {
+    canvasManager.setStylusOnly(!canvasManager.stylusOnly);
+    stylusButton.classList.toggle('active', canvasManager.stylusOnly);
+    stylusButton.setAttribute('aria-pressed', String(canvasManager.stylusOnly));
+    stylusButton.querySelector('span').textContent = `Stylus only: ${canvasManager.stylusOnly ? 'On' : 'Off'}`;
+  });
+  document.getElementById('btn-new-page').addEventListener('click', () => {
+    if (book.pages.length >= 100) {
+      notebookFeedback.textContent = 'Notebook limit reached (100 pages).';
+      return;
+    }
+    capturePage();
+    const page = blankPage(book.pages.length + 1);
+    book.pages.push(page);
+    book.activePageId = page.id;
+    loadPage();
+    saveNow();
+  });
+  document.getElementById('btn-delete-page').addEventListener('click', () => {
+    if (book.pages.length < 2 || !window.confirm(`Delete ${currentPage().title}?`)) return;
+    book.pages = book.pages.filter(page => page.id !== book.activePageId);
+    book.activePageId = book.pages.at(-1).id;
+    loadPage();
+    saveNow();
+  });
+  function changeZoom(delta) {
+    zoom = Math.min(2, Math.max(0.5, Math.round((zoom + delta) * 4) / 4));
+    applyPageSize();
+  }
+  document.getElementById('btn-zoom-in').addEventListener('click', () => changeZoom(0.25));
+  document.getElementById('btn-zoom-out').addEventListener('click', () => changeZoom(-0.25));
+  document.getElementById('btn-export-notebook').addEventListener('click', () => {
+    capturePage();
+    const blob = new Blob([JSON.stringify(book)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `calcink-notebook-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  const importInput = document.getElementById('notebook-import');
+  document.getElementById('btn-import-notebook').addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files?.[0];
+    importInput.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 25_000_000) throw new Error('Notebook file is too large.');
+      const imported = validateNotebook(JSON.parse(await file.text()));
+      if (!window.confirm(`Replace this notebook with ${imported.pages.length} imported page(s)?`)) return;
+      clearTimeout(saveTimer);
+      book = imported;
+      loadPage();
+      saveNow();
+    } catch (error) {
+      window.alert(`Could not import: ${error.message}`);
+    }
+  });
   for (const button of document.querySelectorAll('[data-width]')) {
     button.addEventListener('click', () => {
       document.querySelectorAll('[data-width]').forEach(b => b.classList.remove('active'));
@@ -422,5 +582,19 @@ window.addEventListener('DOMContentLoaded', () => {
       event.preventDefault();
       canvasManager.redo();
     }
+  });
+  loadNotebook().then(saved => {
+    book = saved;
+    loadPage();
+    overlayCanvas.style.pointerEvents = 'auto';
+  }).catch(error => {
+    persistenceAvailable = false;
+    loadPage();
+    overlayCanvas.style.pointerEvents = 'auto';
+    notebookFeedback.textContent = 'Local save unavailable. Export your notebook to keep it.';
+    console.error('CalcInk notebook load:', error);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveNow();
   });
 });

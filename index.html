@@ -26,6 +26,9 @@
         <button id="btn-pixel-eraser" class="btn" title="Pixel Eraser">
           ◌ <span>Pixel Eraser</span>
         </button>
+        <button id="btn-move" class="btn" title="Drag to move the page">
+          ✋ <span>Move</span>
+        </button>
       </div>
 
       <div class="divider"></div>
@@ -59,6 +62,9 @@
         <button id="btn-toggle-boxes" class="btn" title="Show or hide recognition boxes" aria-pressed="false">
           📦 <span>Show Recognition</span>
         </button>
+        <button id="btn-stylus-only" class="btn" title="Ignore finger touches when drawing" aria-pressed="false">
+          🖊️ <span>Stylus only: Off</span>
+        </button>
         <button id="btn-save-sample" class="btn" title="Export this drawing and its predictions locally">
           💾 <span>Save Sample</span>
         </button>
@@ -67,16 +73,33 @@
     <p class="toolbar-hint" aria-hidden="true">Swipe tools sideways →</p>
   </header>
 
-  <!-- Interactive Dual-Layer Canvas Container -->
+  <nav class="notebook-bar" aria-label="Notebook pages">
+    <div id="page-tabs" class="page-tabs"></div>
+    <button id="btn-new-page" class="btn notebook-action" type="button">＋ New page</button>
+    <button id="btn-delete-page" class="btn notebook-action" type="button">Delete page</button>
+    <button id="btn-zoom-out" class="btn notebook-action" type="button" aria-label="Zoom out">−</button>
+    <span id="zoom-label" aria-live="polite">100%</span>
+    <button id="btn-zoom-in" class="btn notebook-action" type="button" aria-label="Zoom in">＋</button>
+    <button id="btn-export-notebook" class="btn notebook-action" type="button">Export</button>
+    <button id="btn-import-notebook" class="btn notebook-action" type="button">Import</button>
+    <input id="notebook-import" type="file" accept="application/json,.json" hidden>
+  </nav>
+
+  <!-- Scrollable notebook sheet; canvas coordinates remain in page CSS pixels. -->
   <main class="canvas-wrapper">
-    <canvas id="ink-canvas" class="ink-canvas"></canvas>
-    <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
-    <p id="canvas-tip" class="canvas-tip">Write <strong>18 + 4 × 3 =</strong> to begin. Tap a written symbol to correct it.</p>
+    <div id="page-spacer" class="page-spacer">
+      <div id="page-surface" class="page-surface">
+        <canvas id="ink-canvas" class="ink-canvas"></canvas>
+        <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+        <p id="canvas-tip" class="canvas-tip">Write <strong>18 + 4 × 3 =</strong> to begin. Tap a written symbol to correct it.</p>
+      </div>
+    </div>
   </main>
 
   <!-- Footer Info & Live Segregation Status -->
   <footer>
     <div class="stats-group">
+      <span id="notebook-feedback" class="notebook-feedback" role="status">Write an equation ending in =</span>
       <div class="stat-item">
         <span>Strokes:</span>
         <span id="stat-strokes" class="stat-value">0</span>

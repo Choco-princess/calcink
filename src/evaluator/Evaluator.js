@@ -3,10 +3,17 @@
 // silently discarded, and JavaScript eval is never used.
 export class Evaluator {
   static evaluate(symbols) {
-    if (!symbols.includes('=')) return '';
-    if (symbols.at(-1) !== '=' || symbols.slice(0, -1).includes('=')) return 'Error';
+    return Evaluator.analyze(symbols).result;
+  }
+
+  static analyze(symbols) {
+    if (symbols.some(symbol => !symbol)) return { result: '', feedback: 'Could not read a symbol. Tap it to correct it.' };
+    if (!symbols.includes('=')) return { result: '', feedback: 'Keep writing; finish with =.' };
+    if (symbols.at(-1) !== '=' || symbols.slice(0, -1).includes('=')) {
+      return { result: 'Error', feedback: 'The equation needs one = at the end.' };
+    }
     const input = symbols.slice(0, -1);
-    if (!input.length) return 'Error';
+    if (!input.length) return { result: 'Error', feedback: 'Write an expression before =.' };
     let i = 0;
 
     function number() {
@@ -54,12 +61,14 @@ export class Evaluator {
 
     try {
       const answer = expression();
-      if (i !== input.length) return 'Error';
-      if (!Number.isFinite(answer)) return 'Undefined';
+      if (i !== input.length) return { result: 'Error', feedback: 'Check the symbol order in this equation.' };
+      if (!Number.isFinite(answer)) return { result: 'Undefined', feedback: 'The result is too large to display.' };
       const rounded = Number(answer.toFixed(4));
-      return Object.is(rounded, -0) ? '0' : rounded.toString();
+      return { result: Object.is(rounded, -0) ? '0' : rounded.toString(), feedback: 'Answer updated.' };
     } catch (error) {
-      return error instanceof RangeError ? 'Undefined' : 'Error';
+      if (error instanceof RangeError) return { result: 'Undefined', feedback: 'Division by zero is undefined.' };
+      if (error.message === 'Number out of range') return { result: 'Error', feedback: 'The number is too large to display.' };
+      return { result: 'Error', feedback: 'Check the symbol order or tap a wrong symbol to correct it.' };
     }
   }
 }

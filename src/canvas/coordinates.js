@@ -7,8 +7,11 @@ export function backingSize(cssWidth, cssHeight, dpr) {
   };
 }
 
-export function pointerPosition(clientX, clientY, rect) {
-  return { x: clientX - rect.left, y: clientY - rect.top };
+export function pointerPosition(clientX, clientY, rect, logicalWidth = rect.width || 1, logicalHeight = rect.height || 1) {
+  return {
+    x: (clientX - rect.left) * logicalWidth / (rect.width || logicalWidth),
+    y: (clientY - rect.top) * logicalHeight / (rect.height || logicalHeight)
+  };
 }
 
 export function pixelCrop(bounds, dpr, padding, canvasWidth, canvasHeight) {

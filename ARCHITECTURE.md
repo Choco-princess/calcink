@@ -16,6 +16,8 @@ Pointer input → CSS-pixel strokes → worker grouping → symbol boxes
 
 The drawing canvas and result overlay stay on the main thread. Grouping and inference run in one worker. Patch extraction reads small canvas regions in chunks and yields between groups. Each edit increments a revision; worker replies for earlier revisions are ignored.
 
+The default canvas view shows ink and answers without diagnostic boxes. A short first-use hint disappears after drawing begins. In Pen mode, a stationary tap on an existing recognized symbol opens a correction picker, while a moving pointer draws normally. A manual choice is keyed to the symbol's stroke IDs, reapplied after recognition, and recalculates the expression. Corrections to changed or regrouped strokes are deliberately discarded. Answers fade in briefly unless reduced motion is requested.
+
 ## Coordinates and editing
 
 Stroke points, bounding boxes, eraser radius, and grouping distances are CSS pixels. `devicePixelRatio` changes only canvas backing resolution and the source-pixel crop used to create CNN patches. Both canvas layers resize together and retained vector strokes are redrawn. Pointer capture keeps a stroke alive when the pointer leaves the canvas. A whole-stroke eraser removes touched strokes; a pixel eraser samples and splits touched paths. Undo/redo stores previous stroke arrays.

@@ -1,6 +1,7 @@
 import { CanvasManager } from './canvas/CanvasManager.js';
 import { PatchExtractor } from './recognition/PatchExtractor.js';
 import { Evaluator } from './evaluator/Evaluator.js';
+import { SYMBOLS, correctionKey, applyManualCorrections } from './recognition/Corrections.js';
 
 function splitAtEquals(rows) {
   const blocks = [];
@@ -37,6 +38,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const statSequence = document.getElementById('stat-sequence');
   const status = document.getElementById('app-status');
   const offlineStatus = document.getElementById('offline-status');
+  const canvasTip = document.getElementById('canvas-tip');
+  const correctionDialog = document.getElementById('correction-dialog');
+  const correctionContext = document.getElementById('correction-context');
+  const correctionOptions = document.getElementById('correction-options');
   const canvasManager = new CanvasManager(inkCanvas, overlayCanvas, { debounceMs: 250 });
   const worker = new Worker(new URL('./recognition/recognition.worker.js', import.meta.url), { type: 'module' });
   let revision = 0;
@@ -44,6 +49,9 @@ window.addEventListener('DOMContentLoaded', () => {
   let pendingRows = [];
   let writingScale = 36;
   let repairCandidates = [];
+  const manualCorrections = new Map();
+  let selectedCluster = null;
+  let hasDrawn = false;
 
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
@@ -53,6 +61,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function showSummary() {
+    if (canvasManager.strokes.length > 0) hasDrawn = true;
+    canvasTip.hidden = hasDrawn;
     statStrokes.textContent = canvasManager.strokes.length;
     statClusters.textContent = canvasManager.blocks.reduce((n, b) => n + b.clusters.length, 0);
     statSequence.textContent = canvasManager.blocks.length
@@ -64,6 +74,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   canvasManager.onCanvasChanged = () => {
+    if (canvasManager.activeStroke) hasDrawn = true;
     revision++;
     pendingRows = [];
     repairCandidates = [];
@@ -71,6 +82,68 @@ window.addEventListener('DOMContentLoaded', () => {
     canvasManager.drawOverlay();
     showSummary();
   };
+
+  canvasManager.onSymbolTap = (x, y, event) => {
+    const padding = event.pointerType === 'touch' ? 12 : 7;
+    const hits = canvasManager.blocks.flatMap(block => block.clusters)
+      .filter(cluster => cluster.predictedSymbol &&
+        x >= cluster.bounds.minX - padding && x <= cluster.bounds.maxX + padding &&
+        y >= cluster.bounds.minY - padding && y <= cluster.bounds.maxY + padding);
+    if (!hits.length) return false;
+    hits.sort((a, b) => {
+      const distance = cluster => {
+        const centerX = (cluster.bounds.minX + cluster.bounds.maxX) / 2;
+        const centerY = (cluster.bounds.minY + cluster.bounds.maxY) / 2;
+        return Math.hypot(x - centerX, y - centerY);
+      };
+      return distance(a) - distance(b);
+    });
+    selectedCluster = hits[0];
+    correctionContext.textContent = `Currently read as ${selectedCluster.predictedSymbol}. Choose what you wrote:`;
+    for (const button of correctionOptions.querySelectorAll('button')) {
+      button.classList.toggle('active', button.dataset.symbol === selectedCluster.predictedSymbol);
+      button.setAttribute('aria-pressed', button.dataset.symbol === selectedCluster.predictedSymbol ? 'true' : 'false');
+    }
+    document.getElementById('correction-automatic').hidden = selectedCluster.source !== 'manual';
+    correctionDialog.showModal();
+    return true;
+  };
+
+  function chooseSymbol(symbol) {
+    if (!selectedCluster) return;
+    const key = correctionKey(selectedCluster);
+    if (symbol === null) {
+      manualCorrections.delete(key);
+      selectedCluster.predictedSymbol = selectedCluster.automaticSymbol;
+      selectedCluster.source = selectedCluster.automaticSource;
+      selectedCluster.confidence = selectedCluster.automaticConfidence;
+    } else {
+      manualCorrections.set(key, symbol);
+      selectedCluster.predictedSymbol = symbol;
+      selectedCluster.confidence = null;
+      selectedCluster.source = 'manual';
+    }
+    repairCandidates = [];
+    canvasManager.blocks = splitAtEquals(pendingRows);
+    canvasManager.drawOverlay();
+    showSummary();
+    correctionDialog.close();
+    selectedCluster = null;
+  }
+
+  for (const symbol of SYMBOLS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn';
+    button.dataset.symbol = symbol;
+    button.textContent = symbol === '-' ? '−' : symbol;
+    button.setAttribute('aria-label', `Use ${symbol === '-' ? 'minus' : symbol}`);
+    button.addEventListener('click', () => chooseSymbol(symbol));
+    correctionOptions.append(button);
+  }
+  document.getElementById('correction-automatic').addEventListener('click', () => chooseSymbol(null));
+  document.getElementById('correction-close').addEventListener('click', () => correctionDialog.close());
+  correctionDialog.addEventListener('close', () => { selectedCluster = null; });
   canvasManager.onStrokesReady = strokes => {
     const serialized = strokes.map(s => ({
       id: s.id, color: s.color, width: s.width,
@@ -117,15 +190,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const dpr = window.devicePixelRatio || 1;
     canvasManager.blocks.forEach((block, blockIndex) => {
       if (block.evaluatedResult !== 'Error') return;
+      if (block.clusters.some(cluster => cluster.source === 'manual')) return;
       const clusters = block.clusters;
       for (let i = 0; i < clusters.length && repairCandidates.length < 8; i++) {
         const current = clusters[i];
         if (current.weakJoin && current.strokeBounds?.length === 2 &&
             current.predictedSymbol !== '=') {
           const start = patches.length;
-          const bounds = [...current.strokeBounds].sort((a, b) => a.minX - b.minX);
-          bounds.forEach(b => patches.push(PatchExtractor.extractPatch(inkCanvas, b, dpr).buffer));
-          repairCandidates.push({ kind: 'split', blockIndex, index: i, start, count: 2, bounds });
+          const parts = current.strokeBounds.map((bounds, index) => ({
+            bounds, strokeId: current.strokeIds[index]
+          })).sort((a, b) => a.bounds.minX - b.bounds.minX);
+          parts.forEach(part => patches.push(PatchExtractor.extractPatch(inkCanvas, part.bounds, dpr).buffer));
+          repairCandidates.push({ kind: 'split', blockIndex, index: i, start, count: 2,
+            bounds: parts.map(part => part.bounds), strokeIds: parts.map(part => [part.strokeId]) });
         }
         if (i + 1 >= clusters.length) continue;
         const next = clusters[i + 1];
@@ -137,7 +214,8 @@ window.addEventListener('DOMContentLoaded', () => {
             b.maxY - b.minY <= writingScale * 2.15) {
           const start = patches.length;
           patches.push(PatchExtractor.extractPatch(inkCanvas, b, dpr).buffer);
-          repairCandidates.push({ kind: 'merge', blockIndex, index: i, start, count: 1, bounds: b });
+          repairCandidates.push({ kind: 'merge', blockIndex, index: i, start, count: 1, bounds: b,
+            strokeIds: [[...current.strokeIds, ...next.strokeIds]] });
         }
       }
     });
@@ -172,12 +250,19 @@ window.addEventListener('DOMContentLoaded', () => {
           ...old, bounds: b, centerY: (b.minY + b.maxY) / 2,
           widthPx: b.maxX - b.minX, heightPx: b.maxY - b.minY,
           predictedSymbol: prediction.symbol, confidence: prediction.confidence,
+          automaticSymbol: prediction.symbol, automaticConfidence: prediction.confidence,
+          automaticSource: 'model', source: 'model', strokeIds: candidate.strokeIds[i],
           strokeCount: candidate.kind === 'split' ? 1 : old.strokeCount + block.clusters[candidate.index + 1].strokeCount
         };
       });
+      const row = pendingRows.find(row => row.clusters.includes(old));
+      if (row) {
+        const rowIndex = row.clusters.indexOf(old);
+        row.clusters.splice(rowIndex, candidate.kind === 'split' ? 1 : 2, ...replacements);
+      }
       block.clusters.splice(candidate.index, candidate.kind === 'split' ? 1 : 2, ...replacements);
-      block.evaluatedResult = answer;
     }
+    canvasManager.blocks = splitAtEquals(pendingRows);
     canvasManager.drawOverlay();
     showSummary();
     repairCandidates = [];
@@ -220,7 +305,11 @@ window.addEventListener('DOMContentLoaded', () => {
         cluster.confidence = smallMark || cluster.shapeSuggestion ? null : prediction.confidence;
         cluster.candidates = prediction.candidates;
         cluster.source = smallMark ? 'dot' : cluster.shapeSuggestion ? 'shape' : 'model';
+        cluster.automaticSymbol = cluster.predictedSymbol;
+        cluster.automaticConfidence = cluster.confidence;
+        cluster.automaticSource = cluster.source;
       });
+      applyManualCorrections(pendingRows, manualCorrections);
       canvasManager.blocks = splitAtEquals(pendingRows);
       canvasManager.drawOverlay();
       showSummary();
@@ -255,14 +344,18 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-undo').addEventListener('click', () => canvasManager.undo());
   document.getElementById('btn-redo').addEventListener('click', () => canvasManager.redo());
   document.getElementById('btn-clear').addEventListener('click', () => {
-    if (window.confirm('Clear the entire canvas?')) canvasManager.clear();
+    if (window.confirm('Clear the entire canvas?')) {
+      manualCorrections.clear();
+      canvasManager.clear();
+    }
   });
   const boxButton = document.getElementById('btn-toggle-boxes');
   boxButton.addEventListener('click', () => {
     canvasManager.toggleBoundingBoxes(!canvasManager.options.showBoundingBoxes);
     boxButton.classList.toggle('active', canvasManager.options.showBoundingBoxes);
+    boxButton.setAttribute('aria-pressed', String(canvasManager.options.showBoundingBoxes));
     boxButton.querySelector('span').textContent =
-      `Bounding Boxes: ${canvasManager.options.showBoundingBoxes ? 'ON' : 'OFF'}`;
+      canvasManager.options.showBoundingBoxes ? 'Hide Recognition' : 'Show Recognition';
   });
   let sampleUrl = null;
   document.getElementById('btn-save-sample').addEventListener('click', () => {
@@ -311,6 +404,7 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('sample-copy').textContent = 'Copy JSON';
   });
   window.addEventListener('keydown', event => {
+    if (correctionDialog.open || document.getElementById('sample-dialog').open) return;
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key.toLowerCase() === 'z') {
       event.preventDefault();

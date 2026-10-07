@@ -71,12 +71,13 @@ This LAN link is for **live testing while the computer stays on**. It is not a p
 
 ## How to use the calculator
 
-- Choose **Pen** and a 2, 4, or 7 pixel line width. Write mostly horizontal expressions. Different equations may share a row; leave a visible gap and end each completed one with `=`.
+- Choose **Pen** and a 2, 4, or 7 pixel line width. Write mostly horizontal expressions. Different equations may share a row; leave a visible gap and end each completed one with `=`. The first-use hint disappears after you start drawing.
+- The canvas starts in a clean view. Tap a recognized handwritten symbol to choose the correct digit or math mark; the answer updates from your choice. Use **Show Recognition** to inspect predicted labels and boxes, and **Use automatic reading** in the correction picker to undo a manual choice. A correction stays with its strokes through unrelated edits; changing or erasing that symbol may require correcting it again.
 - **Stroke Eraser** removes an entire touched stroke. **Pixel Eraser** removes only the touched part. Undo, redo, clear, and a bounding-box toggle are also in the toolbar. On a narrow screen, swipe the toolbar sideways to reach more controls.
 - Keyboard shortcuts on a computer: `Ctrl/Cmd+Z` to undo, `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` to redo.
 - Supported writing: digits `0–9`, `+`, `−`, `×`, `÷`, a decimal point, and terminal `=`. Multi-digit and decimal numbers and a leading minus are supported. Parentheses, variables, powers, and symbols drawn across neighboring symbols are outside this version's scope.
 - A partial expression has no answer yet. A malformed completed expression shows `Error`; division by zero shows `Undefined`. Multiplication and division take priority over addition and subtraction. Answers are displayed to at most four decimal places.
-- If a label is wrong, check its dashed box first. A wrong box means grouping failed; a correct box with the wrong label means recognition failed. Click **Save Sample** to show the stroke data and predictions. Download the JSON or copy it from the dialog, then say what you intended to write. This is a **diagnostic export**, not a way to reopen a drawing in the app.
+- If a label is wrong, turn on **Show Recognition** and check its dashed box first. A wrong box means grouping failed; a correct box with the wrong label means recognition failed. Click **Save Sample** to show the stroke data and predictions. Download the JSON or copy it from the dialog, then say what you intended to write. This is a **diagnostic export**, not a way to reopen a drawing in the app.
 
 The canvas is not saved automatically between page reloads. Export a sample before refreshing if you need to preserve evidence of a mistake.
 

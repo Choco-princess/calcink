@@ -13,7 +13,7 @@ export class CanvasManager {
     this.options = {
       penColor: '#0f172a',
       penWidth: 4,
-      showBoundingBoxes: true,
+      showBoundingBoxes: false,
       debounceMs: 300,
       ...options
     };
@@ -28,8 +28,11 @@ export class CanvasManager {
     this.debounceTimer = null;
     this.onCanvasChanged = null;
     this.onStrokesReady = null;
+    this.onSymbolTap = null;
     this.activePointerId = null;
     this.eraseHistoryPushed = false;
+    this.answerAnimations = new Map();
+    this.animationFrame = null;
 
     this.initCanvasSize();
     this.attachEventListeners();
@@ -83,29 +86,18 @@ export class CanvasManager {
   onPointerDown(e) {
     if (this.isDrawing) return;
     e.preventDefault();
-    clearTimeout(this.debounceTimer);
     this.isDrawing = true;
     this.activePointerId = e.pointerId;
     this.overlayCanvas.setPointerCapture(e.pointerId);
-    this.onCanvasChanged?.();
     const pos = this.getPointerPos(e);
 
     if (this.currentTool === 'pen') {
-      this.history.pushState(this.strokes);
       this.activeStroke = new Stroke();
       this.activeStroke.color = this.options.penColor;
       this.activeStroke.width = this.options.penWidth;
       this.activeStroke.addPoint(pos.x, pos.y, pos.pressure);
-
-      this.inkCtx.beginPath();
-      this.inkCtx.lineCap = 'round';
-      this.inkCtx.lineJoin = 'round';
-      this.inkCtx.strokeStyle = this.activeStroke.color;
-      this.inkCtx.lineWidth = this.activeStroke.width;
-      this.inkCtx.moveTo(pos.x, pos.y);
-      this.inkCtx.lineTo(pos.x + 0.1, pos.y + 0.1);
-      this.inkCtx.stroke();
     } else {
+      clearTimeout(this.debounceTimer);
       this.eraseHistoryPushed = false;
       this.eraseAtPoint(pos.x, pos.y);
     }
@@ -118,6 +110,13 @@ export class CanvasManager {
 
     if (this.currentTool === 'pen' && this.activeStroke) {
       const prevPoint = this.activeStroke.points[this.activeStroke.points.length - 1];
+      const startPoint = this.activeStroke.points[0];
+      if (this.activeStroke.points.length === 1) {
+        if (Math.hypot(pos.x - startPoint.x, pos.y - startPoint.y) < 5) return;
+        clearTimeout(this.debounceTimer);
+        this.history.pushState(this.strokes);
+        this.onCanvasChanged?.();
+      }
       this.activeStroke.addPoint(pos.x, pos.y, pos.pressure);
 
       // Finish each segment at the newest point so the ink matches the stored stroke.
@@ -144,10 +143,23 @@ export class CanvasManager {
     this.activePointerId = null;
 
     if (this.currentTool === 'pen' && this.activeStroke) {
-      if (this.activeStroke.points.length > 0) {
-        this.strokes.push(this.activeStroke);
+      if (this.activeStroke.points.length === 1) {
+        const point = this.activeStroke.points[0];
+        const end = this.getPointerPos(e);
+        if (Math.hypot(end.x - point.x, end.y - point.y) < 5 &&
+            this.onSymbolTap?.(point.x, point.y, e)) {
+          this.activeStroke = null;
+          return;
+        }
+        clearTimeout(this.debounceTimer);
+        this.history.pushState(this.strokes);
         this.onCanvasChanged?.();
+        if (Math.hypot(end.x - point.x, end.y - point.y) >= 5) {
+          this.activeStroke.addPoint(end.x, end.y, end.pressure);
+        }
       }
+      this.strokes.push(this.activeStroke);
+      this.redrawAllStrokes();
       this.activeStroke = null;
     }
     this.scheduleGrouping();
@@ -228,7 +240,18 @@ export class CanvasManager {
     const rect = this.overlayCanvas.getBoundingClientRect();
     this.overlayCtx.clearRect(0, 0, rect.width, rect.height);
 
-    if (this.blocks.length === 0) return;
+    if (this.blocks.length === 0) {
+      this.answerAnimations.clear();
+      return;
+    }
+
+    const now = performance.now();
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    let animating = false;
+    const activeBlockIds = new Set(this.blocks.map(block => block.id));
+    for (const id of this.answerAnimations.keys()) {
+      if (!activeBlockIds.has(id)) this.answerAnimations.delete(id);
+    }
 
     const padding = 6;
     const blockColors = ['#2563eb', '#059669', '#7c3aed', '#d97706', '#db2777', '#0891b2'];
@@ -285,6 +308,15 @@ export class CanvasManager {
 
           this.overlayCtx.save();
           this.overlayCtx.textBaseline = 'middle';
+          const previous = this.answerAnimations.get(block.id);
+          if (!previous || previous.value !== block.evaluatedResult) {
+            this.answerAnimations.set(block.id, { value: block.evaluatedResult, since: now });
+          }
+          const elapsed = now - this.answerAnimations.get(block.id).since;
+          if (!reduceMotion && elapsed < 220) {
+            this.overlayCtx.globalAlpha = 0.25 + 0.75 * Math.min(1, elapsed / 220);
+            animating = true;
+          }
 
           if (block.evaluatedResult === 'Undefined' || block.evaluatedResult === 'Error') {
             // Render error badge
@@ -302,6 +334,12 @@ export class CanvasManager {
         }
       }
     });
+    if (animating && this.animationFrame === null) {
+      this.animationFrame = requestAnimationFrame(() => {
+        this.animationFrame = null;
+        this.drawOverlay();
+      });
+    }
   }
 
   undo() {

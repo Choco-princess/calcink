@@ -72,4 +72,6 @@ The next improvement should come from **more labeled real drawings**, especially
 
 After the local work, we uploaded the tested source to GitHub. The first automatic deployment passed its tests and build, then stopped because GitHub Pages had not been enabled. Once the repository was made public and Pages was configured to use GitHub Actions, a fresh run succeeded and the site became available at [choco-princess.github.io/calcink/](https://choco-princess.github.io/calcink/). The generated `dist/` folder stays out of Git; the workflow builds it for each deployment.
 
+We then made a small usability pass for phones and tablets: scrollable tools, a clean canvas view, larger buttons, a first-use hint, and a short answer fade. More importantly, a tap on a recognized symbol now opens a correction picker; a drag still draws ink. A manual choice recalculates the expression and stays attached to the same strokes through unrelated edits. A phone-sized browser replay changed `1 + 1 = 2` to `1 + 2 = 3`, changed the equals sign away and back, and checked that a later stroke kept the correction. This is a tested interaction, not a claim that recognition is perfect on physical devices.
+
 This journey has one recurring lesson: a plausible rule or a high published accuracy number is a starting hypothesis. The drawings in the actual app are the test.

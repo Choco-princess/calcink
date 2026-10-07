@@ -32,6 +32,7 @@ function serializeBlock(block, scale) {
       widthPx: cluster.widthPx,
       heightPx: cluster.heightPx,
       strokeCount: cluster.strokes.length,
+      strokeIds: cluster.strokes.map(stroke => stroke.id),
       shapeSuggestion: suggestShapeSymbol(cluster.strokes, cluster.bounds, scale),
       weakJoin: cluster.weakJoin,
       strokeBounds: cluster.strokes.map(stroke => stroke.bounds)

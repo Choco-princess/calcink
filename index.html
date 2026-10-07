@@ -56,8 +56,8 @@
 
       <!-- Segregation View Toggle -->
       <div class="tool-group">
-        <button id="btn-toggle-boxes" class="btn active" title="Toggle AI Character Bounding Boxes">
-          📦 <span>Bounding Boxes: ON</span>
+        <button id="btn-toggle-boxes" class="btn" title="Show or hide recognition boxes" aria-pressed="false">
+          📦 <span>Show Recognition</span>
         </button>
         <button id="btn-save-sample" class="btn" title="Export this drawing and its predictions locally">
           💾 <span>Save Sample</span>
@@ -71,6 +71,7 @@
   <main class="canvas-wrapper">
     <canvas id="ink-canvas" class="ink-canvas"></canvas>
     <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+    <p id="canvas-tip" class="canvas-tip">Write <strong>18 + 4 × 3 =</strong> to begin. Tap a written symbol to correct it.</p>
   </main>
 
   <!-- Footer Info & Live Segregation Status -->
@@ -86,7 +87,7 @@
       </div>
       <div class="stat-item">
         <span>Left-to-Right Sequence:</span>
-        <span id="stat-sequence" class="stat-value">[ none ]</span>
+        <span id="stat-sequence" class="stat-value" aria-live="polite">[ none ]</span>
       </div>
     </div>
 
@@ -104,6 +105,16 @@
       <a id="sample-download" class="btn" download>Download JSON</a>
       <button id="sample-copy" class="btn" type="button">Copy JSON</button>
       <button id="sample-close" class="btn" type="button">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="correction-dialog" aria-labelledby="correction-title">
+    <h2 id="correction-title">Correct symbol</h2>
+    <p id="correction-context"></p>
+    <div id="correction-options" class="symbol-options" aria-label="Choose the intended symbol"></div>
+    <div class="sample-actions">
+      <button id="correction-automatic" class="btn" type="button">Use automatic reading</button>
+      <button id="correction-close" class="btn" type="button">Cancel</button>
     </div>
   </dialog>
 

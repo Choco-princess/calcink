@@ -74,6 +74,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   canvasManager.onCanvasChanged = () => {
+    if (!correctionDialog.open) selectedCluster = null;
     if (canvasManager.activeStroke) hasDrawn = true;
     revision++;
     pendingRows = [];
@@ -105,9 +106,17 @@ window.addEventListener('DOMContentLoaded', () => {
       button.setAttribute('aria-pressed', button.dataset.symbol === selectedCluster.predictedSymbol ? 'true' : 'false');
     }
     document.getElementById('correction-automatic').hidden = selectedCluster.source !== 'manual';
-    correctionDialog.showModal();
     return true;
   };
+
+  // A touch sends a click after pointerup. Open the picker from that click so
+  // the same gesture cannot land on an option that appeared under the finger.
+  overlayCanvas.addEventListener('click', event => {
+    if (!selectedCluster || correctionDialog.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    correctionDialog.showModal();
+  });
 
   function chooseSymbol(symbol) {
     if (!selectedCluster) return;

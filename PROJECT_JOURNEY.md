@@ -74,4 +74,6 @@ After the local work, we uploaded the tested source to GitHub. The first automat
 
 We then made a small usability pass for phones and tablets: scrollable tools, a clean canvas view, larger buttons, a first-use hint, and a short answer fade. More importantly, a tap on a recognized symbol now opens a correction picker; a drag still draws ink. A manual choice recalculates the expression and stays attached to the same strokes through unrelated edits. A phone-sized browser replay changed `1 + 1 = 2` to `1 + 2 = 3`, changed the equals sign away and back, and checked that a later stroke kept the correction. This is a tested interaction, not a claim that recognition is perfect on physical devices.
 
+A real phone exposed a touch-only correction bug that the earlier mouse-driven browser replay missed. The picker opened during `pointerup`, and the browser then sent the same tap's `click` to a symbol button that had just appeared. That silently chose a different symbol. We now open the picker when the canvas receives the completed click. A touch-enabled browser replay confirmed that the first tap only opens the picker and a separate second tap chooses the replacement.
+
 This journey has one recurring lesson: a plausible rule or a high published accuracy number is a starting hypothesis. The drawings in the actual app are the test.
